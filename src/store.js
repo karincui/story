@@ -1,0 +1,343 @@
+import { supabase } from './supabase.js'
+
+export const PRESET_TAGS = [
+  '未读',
+  '仙侠',
+  '玄幻',
+  '甜宠',
+  '言情',
+  '悬疑',
+  '推理',
+  '科幻',
+  '现实',
+  '历史',
+  '轻小说',
+  '追更中',
+]
+
+/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,createdAt:number,updatedAt:number}>} */
+let novelsCache = []
+/** @type {{ customTags: string[], hiddenPresets: string[] }} */
+let prefsCache = { customTags: [], hiddenPresets: [] }
+
+function rowToNovel(row) {
+  return {
+    id: row.id,
+    title: row.title || '',
+    author: row.author || '',
+    synopsis: row.synopsis || '',
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    sortOrder: row.sort_order ?? 0,
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
+  }
+}
+
+async function requireUserId() {
+  const { data, error } = await supabase.auth.getUser()
+  if (error) throw error
+  if (!data.user) throw new Error('请先登录')
+  return data.user.id
+}
+
+async function ensurePrefs(userId) {
+  const { data, error } = await supabase
+    .from('user_prefs')
+    .select('custom_tags, hidden_presets')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) throw error
+  if (data) {
+    prefsCache = {
+      customTags: data.custom_tags || [],
+      hiddenPresets: data.hidden_presets || [],
+    }
+    return
+  }
+  const { error: insertErr } = await supabase.from('user_prefs').insert({
+    user_id: userId,
+    custom_tags: [],
+    hidden_presets: [],
+  })
+  if (insertErr) throw insertErr
+  prefsCache = { customTags: [], hiddenPresets: [] }
+}
+
+async function savePrefs() {
+  const userId = await requireUserId()
+  const { error } = await supabase.from('user_prefs').upsert({
+    user_id: userId,
+    custom_tags: prefsCache.customTags,
+    hidden_presets: prefsCache.hiddenPresets,
+    updated_at: new Date().toISOString(),
+  })
+  if (error) throw error
+}
+
+/** 从云端拉取书单与标签偏好（登录后调用） */
+export async function refreshStore() {
+  const userId = await requireUserId()
+  const [{ data, error }, _] = await Promise.all([
+    supabase
+      .from('novels')
+      .select('*')
+      .eq('user_id', userId)
+      .order('sort_order', { ascending: true }),
+    ensurePrefs(userId),
+  ])
+  if (error) throw error
+  novelsCache = (data || []).map(rowToNovel)
+  ensureSortOrdersLocal()
+  return listNovels()
+}
+
+function ensureSortOrdersLocal() {
+  const needs = novelsCache.some((n) => typeof n.sortOrder !== 'number')
+  if (!needs) return
+  const ranked = [...novelsCache].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  ranked.forEach((n, i) => {
+    if (typeof n.sortOrder !== 'number') n.sortOrder = i
+  })
+}
+
+export function getAllTags() {
+  const hidden = new Set(prefsCache.hiddenPresets)
+  const presets = PRESET_TAGS.filter((t) => !hidden.has(t))
+  const fromNovels = novelsCache.flatMap((n) => n.tags || [])
+  return [...new Set([...presets, ...prefsCache.customTags, ...fromNovels])]
+}
+
+export async function addCustomTag(tag) {
+  const t = tag.trim()
+  if (!t) return getAllTags()
+  prefsCache.hiddenPresets = prefsCache.hiddenPresets.filter((x) => x !== t)
+  if (![...PRESET_TAGS, ...prefsCache.customTags].includes(t)) {
+    prefsCache.customTags = [...prefsCache.customTags, t]
+  }
+  await savePrefs()
+  return getAllTags()
+}
+
+export async function deleteTag(tag) {
+  const t = String(tag || '').trim()
+  if (!t) return { removedFromNovels: 0 }
+  prefsCache.customTags = prefsCache.customTags.filter((x) => x !== t)
+  if (PRESET_TAGS.includes(t)) {
+    if (!prefsCache.hiddenPresets.includes(t)) {
+      prefsCache.hiddenPresets = [...prefsCache.hiddenPresets, t]
+    }
+  }
+  await savePrefs()
+
+  let removedFromNovels = 0
+  const userId = await requireUserId()
+  const now = new Date().toISOString()
+  for (const n of novelsCache) {
+    if (!(n.tags || []).includes(t)) continue
+    removedFromNovels += 1
+    n.tags = n.tags.filter((x) => x !== t)
+    n.updatedAt = Date.now()
+    const { error } = await supabase
+      .from('novels')
+      .update({ tags: n.tags, updated_at: now })
+      .eq('id', n.id)
+      .eq('user_id', userId)
+    if (error) throw error
+  }
+  return { removedFromNovels }
+}
+
+export function countNovelsWithTag(tag) {
+  const t = String(tag || '').trim()
+  if (!t) return 0
+  return novelsCache.filter((n) => (n.tags || []).includes(t)).length
+}
+
+export function listNovels() {
+  ensureSortOrdersLocal()
+  return [...novelsCache].sort(
+    (a, b) =>
+      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (b.updatedAt || 0) - (a.updatedAt || 0),
+  )
+}
+
+export async function moveNovelInView(visibleIds, id, action) {
+  const order = visibleIds.filter(Boolean)
+  const i = order.indexOf(id)
+  if (i < 0) return false
+  if (action === 'top') {
+    if (i === 0) return false
+    order.splice(i, 1)
+    order.unshift(id)
+  } else if (action === 'up') {
+    if (i === 0) return false
+    ;[order[i - 1], order[i]] = [order[i], order[i - 1]]
+  } else if (action === 'down') {
+    if (i >= order.length - 1) return false
+    ;[order[i], order[i + 1]] = [order[i + 1], order[i]]
+  } else {
+    return false
+  }
+
+  const full = listNovels().map((n) => n.id)
+  const positions = visibleIds
+    .map((vid) => full.indexOf(vid))
+    .filter((p) => p >= 0)
+    .sort((a, b) => a - b)
+  if (positions.length !== order.length) return false
+
+  const nextFull = [...full]
+  positions.forEach((pos, idx) => {
+    nextFull[pos] = order[idx]
+  })
+
+  const byId = new Map(novelsCache.map((n) => [n.id, n]))
+  nextFull.forEach((nid, idx) => {
+    const n = byId.get(nid)
+    if (n) n.sortOrder = idx
+  })
+
+  const userId = await requireUserId()
+  const updates = nextFull.map((nid, idx) => {
+    const n = byId.get(nid)
+    return supabase
+      .from('novels')
+      .update({ sort_order: idx })
+      .eq('id', nid)
+      .eq('user_id', userId)
+      .then(({ error }) => {
+        if (error) throw error
+        return n
+      })
+  })
+  await Promise.all(updates)
+  return true
+}
+
+export function getNovel(id) {
+  return novelsCache.find((n) => n.id === id) || null
+}
+
+export async function upsertNovel(data) {
+  const userId = await requireUserId()
+  const title = (data.title || '').trim()
+  const author = (data.author || '').trim()
+  if (!title) throw new Error('请填写书名')
+
+  const tags = [...new Set((data.tags || []).map((t) => t.trim()).filter(Boolean))]
+  for (const t of tags) {
+    if (!PRESET_TAGS.includes(t) && !prefsCache.customTags.includes(t)) {
+      prefsCache.customTags = [...prefsCache.customTags, t]
+    }
+  }
+  prefsCache.hiddenPresets = prefsCache.hiddenPresets.filter((x) => !tags.includes(x))
+  await savePrefs()
+
+  const nowIso = new Date().toISOString()
+
+  if (data.id) {
+    const existing = novelsCache.find((n) => n.id === data.id)
+    if (existing) {
+      const { data: row, error } = await supabase
+        .from('novels')
+        .update({
+          title,
+          author,
+          synopsis: (data.synopsis || '').trim(),
+          tags,
+          updated_at: nowIso,
+        })
+        .eq('id', data.id)
+        .eq('user_id', userId)
+        .select('*')
+        .single()
+      if (error) throw error
+      const novel = rowToNovel(row)
+      novelsCache = novelsCache.map((n) => (n.id === novel.id ? novel : n))
+      return novel
+    }
+  }
+
+  const maxOrder = novelsCache.reduce((m, n) => Math.max(m, n.sortOrder ?? 0), -1)
+  const { data: row, error } = await supabase
+    .from('novels')
+    .insert({
+      user_id: userId,
+      title,
+      author,
+      synopsis: (data.synopsis || '').trim(),
+      tags,
+      sort_order: maxOrder + 1,
+    })
+    .select('*')
+    .single()
+  if (error) throw error
+  const novel = rowToNovel(row)
+  novelsCache.push(novel)
+  return novel
+}
+
+export async function deleteNovel(id) {
+  const userId = await requireUserId()
+  const { error } = await supabase.from('novels').delete().eq('id', id).eq('user_id', userId)
+  if (error) throw error
+  novelsCache = novelsCache.filter((n) => n.id !== id)
+}
+
+export function searchNovels({ query = '', tags = [] } = {}) {
+  const q = query.trim().toLowerCase()
+  return listNovels().filter((n) => {
+    const matchQ =
+      !q ||
+      n.title.toLowerCase().includes(q) ||
+      n.author.toLowerCase().includes(q) ||
+      (n.synopsis || '').toLowerCase().includes(q) ||
+      (n.tags || []).some((t) => t.toLowerCase().includes(q))
+    const matchTags = !tags.length || tags.every((t) => (n.tags || []).includes(t))
+    return matchQ && matchTags
+  })
+}
+
+export function exportMarkdown(novels) {
+  return novels
+    .map((n) => {
+      const tagLine = (n.tags || []).length ? `标签：${n.tags.join('、')}` : ''
+      const syn = n.synopsis ? `\n\n${n.synopsis}` : ''
+      const authorLine = n.author ? `\n作者：${n.author}` : ''
+      return `## ${n.title}${authorLine}${tagLine ? `\n${tagLine}` : ''}${syn}`
+    })
+    .join('\n\n---\n\n')
+}
+
+/** 供本地迁移：当前缓存是否为空 */
+export function isStoreEmpty() {
+  return novelsCache.length === 0
+}
+
+/** 批量写入（本地迁移用），返回成功条数 */
+export async function bulkInsertNovels(items) {
+  const userId = await requireUserId()
+  if (!items?.length) return 0
+  const rows = items.map((n, i) => ({
+    user_id: userId,
+    title: (n.title || '').trim(),
+    author: (n.author || '').trim(),
+    synopsis: (n.synopsis || '').trim(),
+    tags: Array.isArray(n.tags) ? n.tags : [],
+    sort_order: typeof n.sortOrder === 'number' ? n.sortOrder : i,
+  })).filter((r) => r.title)
+  if (!rows.length) return 0
+  const { data, error } = await supabase.from('novels').insert(rows).select('*')
+  if (error) throw error
+  const added = (data || []).map(rowToNovel)
+  novelsCache.push(...added)
+  return added.length
+}
+
+export async function replacePrefsFromLocal({ customTags = [], hiddenPresets = [] } = {}) {
+  prefsCache = {
+    customTags: [...new Set(customTags.map((t) => String(t).trim()).filter(Boolean))],
+    hiddenPresets: [...new Set(hiddenPresets.map((t) => String(t).trim()).filter(Boolean))],
+  }
+  await savePrefs()
+}
