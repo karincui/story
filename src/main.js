@@ -1539,6 +1539,18 @@ function bindEvents() {
     render()
   })
 
+  app.querySelector('#refresh-library')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      try {
+        await runBusy('刷新书单…', () => refreshStore())
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
+
   app.querySelectorAll('[data-sort]').forEach((btn) => {
     btn.addEventListener(
       'click',
