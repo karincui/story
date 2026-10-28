@@ -71,6 +71,9 @@ const state = {
   readerEncoding: 'auto',
   /** @type {ArrayBuffer|null} */
   readerBuffer: null,
+  readerPage: 1,
+  readerTotalPages: 1,
+  readerPercent: 0,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -792,6 +795,67 @@ function renderGallery() {
   `
 }
 
+function readerProgressKey(novelId) {
+  return `novel-reader-progress:${novelId || ''}`
+}
+
+function saveReaderProgress() {
+  if (!state.readerNovelId) return
+  const body = app.querySelector('#reader-body')
+  try {
+    localStorage.setItem(
+      readerProgressKey(state.readerNovelId),
+      JSON.stringify({
+        scrollTop: body?.scrollTop || 0,
+        percent: state.readerPercent || 0,
+        page: state.readerPage || 1,
+        encoding: state.readerEncoding || 'auto',
+      }),
+    )
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function loadReaderProgress(novelId) {
+  try {
+    const raw = localStorage.getItem(readerProgressKey(novelId))
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function updateReaderProgressUi() {
+  const body = app.querySelector('#reader-body')
+  const fill = app.querySelector('#reader-progress-fill')
+  const pageLabel = app.querySelector('#reader-page-label')
+  const pctLabel = app.querySelector('#reader-pct-label')
+  if (!body) return
+
+  const viewH = Math.max(1, body.clientHeight)
+  const totalH = Math.max(viewH, body.scrollHeight)
+  const maxScroll = Math.max(0, totalH - viewH)
+  const scroll = body.scrollTop
+  const totalPages = Math.max(1, Math.ceil(totalH / viewH))
+  let page =
+    maxScroll <= 0
+      ? 1
+      : scroll + viewH >= totalH - 4
+        ? totalPages
+        : Math.min(totalPages, Math.floor(scroll / viewH) + 1)
+  const percent = maxScroll <= 0 ? 100 : Math.min(100, Math.round((scroll / maxScroll) * 100))
+
+  state.readerPage = page
+  state.readerTotalPages = totalPages
+  state.readerPercent = percent
+
+  if (fill) fill.style.width = `${percent}%`
+  if (pageLabel) pageLabel.textContent = `${page} / ${totalPages}`
+  if (pctLabel) pctLabel.textContent = `${percent}%`
+  saveReaderProgress()
+}
+
 function renderTxtReader() {
   const size = state.readerFontSize || 18
   const enc = state.readerEncoding || 'auto'
@@ -821,6 +885,15 @@ function renderTxtReader() {
             : `<pre class="reader-text">${escapeHtml(state.readerText)}</pre>`
         }
       </div>
+      <footer class="reader-progress" aria-label="阅读进度">
+        <div class="reader-progress-track">
+          <div class="reader-progress-fill" id="reader-progress-fill" style="width:${state.readerPercent || 0}%"></div>
+        </div>
+        <div class="reader-progress-meta">
+          <span id="reader-page-label">${state.readerPage || 1} / ${state.readerTotalPages || 1}</span>
+          <span id="reader-pct-label">${state.readerPercent || 0}%</span>
+        </div>
+      </footer>
     </div>
   `
 }
