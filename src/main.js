@@ -22,7 +22,7 @@ import {
 } from './store.js'
 import { getSession, signInWithPassword, signUpWithPassword, signOut, onAuthChange } from './auth.js'
 import { migrateLocalIfNeeded } from './migrateLocal.js'
-import { recognizeImages } from './ocr.js'
+import { recognizeImages, preloadOcr } from './ocr.js'
 import { parseOcrText } from './parseBooks.js'
 import { tagStyleAttr } from './tagColors.js'
 import { parseExcelFile, downloadExcelTemplate } from './excelImport.js'
