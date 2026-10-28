@@ -136,6 +136,39 @@ button {
   padding: 20px 20px 48px;
 }
 
+@media (max-width: 430px) {
+  .app-shell {
+    padding: 12px 12px 36px;
+  }
+
+  .topbar {
+    gap: 8px 10px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+  }
+
+  .brand {
+    font-size: 1.28rem;
+  }
+
+  .brand-sub {
+    font-size: 0.78rem;
+  }
+
+  .top-actions .btn:not(.ghost) {
+    padding: 6px 10px;
+    font-size: 0.82rem;
+  }
+
+  .nav {
+    gap: 10px 12px;
+  }
+
+  .nav-btn {
+    font-size: 0.82rem;
+  }
+}
+
 .auth-shell {
   min-height: 100vh;
   display: grid;
@@ -640,9 +673,59 @@ button {
   gap: 8px;
 }
 
+/* 手机（含 iPhone）保持一行两本，卡片更紧凑 */
 @media (max-width: 560px) {
   .novel-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .swipe-content {
+    padding: 8px 10px 8px 10px;
+    gap: 4px;
+  }
+
+  .swipe-content::before {
+    top: 8px;
+    bottom: 8px;
+  }
+
+  .swipe-content h3 {
+    font-size: 0.88rem;
+    line-height: 1.25;
+  }
+
+  .by-author {
+    display: block;
+    margin-left: 0;
+    margin-top: 2px;
+    font-size: 0.7rem;
+  }
+
+  .card-tags {
+    gap: 3px;
+  }
+
+  .card-tags span {
+    font-size: 0.62rem;
+    padding: 1px 4px;
+  }
+
+  .swipe-hint {
+    display: none;
+  }
+
+  .swipe-actions {
+    width: 96px;
+  }
+
+  .swipe-btn {
+    font-size: 0.72rem;
+  }
+
+  .sort-controls .btn.sm {
+    padding: 3px 6px;
+    font-size: 0.7rem;
   }
 }
 

@@ -1204,7 +1204,9 @@ function bindExcel() {
   )
 }
 
-const SWIPE_OPEN = -128
+function swipeOpenX() {
+  return window.matchMedia('(max-width: 560px)').matches ? -96 : -128
+}
 
 function closeAllSwipes(except = null) {
   app.querySelectorAll('.swipe-item.open .swipe-content').forEach((el) => {
@@ -1228,7 +1230,7 @@ function bindSwipe() {
     let locked = null // 'h' | 'v'
     let moved = false
 
-    const getOpenX = () => (item.classList.contains('open') ? SWIPE_OPEN : 0)
+    const getOpenX = () => (item.classList.contains('open') ? swipeOpenX() : 0)
 
     const onStart = (clientX, clientY) => {
       tracking = true
@@ -1256,7 +1258,8 @@ function bindSwipe() {
       if (locked !== 'h') return
       e?.preventDefault?.()
       moved = true
-      currentX = Math.min(0, Math.max(SWIPE_OPEN, baseX + dx))
+      const openX = swipeOpenX()
+      currentX = Math.min(0, Math.max(openX, baseX + dx))
       content.style.transform = `translateX(${currentX}px)`
     }
 
@@ -1280,10 +1283,11 @@ function bindSwipe() {
         return
       }
 
-      const shouldOpen = currentX < SWIPE_OPEN / 2
+      const openX = swipeOpenX()
+      const shouldOpen = currentX < openX / 2
       if (shouldOpen) {
         closeAllSwipes(content)
-        content.style.transform = `translateX(${SWIPE_OPEN}px)`
+        content.style.transform = `translateX(${openX}px)`
         item.classList.add('open')
       } else {
         content.style.transform = 'translateX(0)'
