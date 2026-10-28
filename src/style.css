@@ -904,6 +904,62 @@ button {
   font-size: 0.8rem;
 }
 
+/* TXT 阅读器 */
+.reader-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: #f7f3ea;
+  color: #2a241c;
+}
+
+.reader-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  padding-top: max(10px, env(safe-area-inset-top));
+  border-bottom: 1px solid rgba(42, 36, 28, 0.12);
+  background: color-mix(in srgb, #f7f3ea 92%, #fff);
+}
+
+.reader-title {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.reader-body {
+  flex: 1;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px 16px max(28px, env(safe-area-inset-bottom));
+  line-height: 1.75;
+}
+
+.reader-text {
+  margin: 0 auto;
+  max-width: 42rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font);
+  font-size: inherit;
+  line-height: inherit;
+}
+
 .swipe-hint {
   position: absolute;
   right: 10px;

@@ -12,6 +12,8 @@ import {
   moveNovelInView,
   refreshStore,
   getAttachmentSignedUrl,
+  fetchAttachmentText,
+  isTextAttachment,
   ATTACH_MAX_BYTES,
 } from './store.js'
 import { getSession, signInWithPassword, signUpWithPassword, signOut, onAuthChange } from './auth.js'
@@ -58,6 +60,13 @@ const state = {
   /** @type {File|null} */
   pendingAttachmentFile: null,
   pendingAttachmentClear: false,
+  /** txt 阅读器 */
+  readerOpen: false,
+  readerNovelId: null,
+  readerTitle: '',
+  readerText: '',
+  readerFontSize: 18,
+  readerError: '',
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -310,6 +319,7 @@ function render() {
     </div>
     ${state.editingId !== null ? renderModal() : ''}
     ${state.galleryPreviewId ? renderGalleryLightbox() : ''}
+    ${state.readerOpen ? renderTxtReader() : ''}
   `
   bindEvents()
   // 整页重绘会把滚动顶回顶部；恢复位置，避免移除/改标签后跳回第一条
@@ -520,8 +530,9 @@ function formatAttachSize(n) {
 
 function renderCard(n, index = 0, total = 0) {
   const byline = n.author ? ` <span class="by-author">by${escapeHtml(n.author)}</span>` : ''
+  const isTxt = n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime)
   const attach = n.attachmentPath
-    ? `<button type="button" class="attach-chip" data-open-attach="${n.id}" title="${escapeHtml(n.attachmentName || '附件')}">📎 ${escapeHtml((n.attachmentName || '附件').slice(0, 16))}${(n.attachmentName || '').length > 16 ? '…' : ''}</button>`
+    ? `<button type="button" class="attach-chip" data-open-attach="${n.id}" title="${escapeHtml(n.attachmentName || '附件')}">${isTxt ? '📖 阅读' : '📎'} ${escapeHtml((n.attachmentName || '附件').slice(0, 14))}${(n.attachmentName || '').length > 14 ? '…' : ''}</button>`
     : ''
   const sortControls = state.sortMode
     ? `<div class="sort-controls">
@@ -770,6 +781,77 @@ function renderGallery() {
             </div>`
     }
   `
+}
+
+function renderTxtReader() {
+  const size = state.readerFontSize || 18
+  return `
+    <div class="reader-shell" id="txt-reader" role="dialog" aria-modal="true" aria-label="TXT 阅读器">
+      <header class="reader-bar">
+        <button type="button" class="btn ghost sm" id="reader-close">关闭</button>
+        <h2 class="reader-title">${escapeHtml(state.readerTitle || '阅读')}</h2>
+        <div class="reader-tools">
+          <button type="button" class="btn ghost sm" id="reader-font-down" title="缩小字号">A-</button>
+          <button type="button" class="btn ghost sm" id="reader-font-up" title="放大字号">A+</button>
+        </div>
+      </header>
+      <div class="reader-body" id="reader-body" style="font-size:${size}px">
+        ${
+          state.readerError
+            ? `<p class="error-text">${escapeHtml(state.readerError)}</p>`
+            : `<pre class="reader-text">${escapeHtml(state.readerText)}</pre>`
+        }
+      </div>
+    </div>
+  `
+}
+
+function bindTxtReader() {
+  if (!state.readerOpen) return
+  const close = () => {
+    state.readerOpen = false
+    state.readerText = ''
+    state.readerError = ''
+    state.readerNovelId = null
+    render()
+  }
+  app.querySelector('#reader-close')?.addEventListener('click', close)
+  app.querySelector('#reader-font-down')?.addEventListener('click', () => {
+    state.readerFontSize = Math.max(14, (state.readerFontSize || 18) - 2)
+    const body = app.querySelector('#reader-body')
+    if (body) body.style.fontSize = `${state.readerFontSize}px`
+  })
+  app.querySelector('#reader-font-up')?.addEventListener('click', () => {
+    state.readerFontSize = Math.min(28, (state.readerFontSize || 18) + 2)
+    const body = app.querySelector('#reader-body')
+    if (body) body.style.fontSize = `${state.readerFontSize}px`
+  })
+}
+
+async function openNovelAttachment(novel) {
+  if (!novel?.attachmentPath) return
+  if (isTextAttachment(novel.attachmentName, novel.attachmentMime)) {
+    state.readerOpen = true
+    state.readerNovelId = novel.id
+    state.readerTitle = novel.title || novel.attachmentName || '阅读'
+    state.readerText = ''
+    state.readerError = ''
+    render()
+    try {
+      await runBusy('加载正文…', async () => {
+        state.readerText = await fetchAttachmentText(novel.attachmentPath)
+      })
+      render()
+      const body = app.querySelector('#reader-body')
+      if (body) body.scrollTop = 0
+    } catch (err) {
+      state.readerError = err.message || String(err)
+      render()
+    }
+    return
+  }
+  const url = await getAttachmentSignedUrl(novel.attachmentPath)
+  window.open(url, '_blank', 'noopener,noreferrer')
 }
 
 function renderGalleryLightbox() {
@@ -1060,6 +1142,7 @@ function bindEvents() {
   bindImport()
   bindExcel()
   bindGallery()
+  bindTxtReader()
 }
 
 function bindGallery() {

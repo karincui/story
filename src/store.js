@@ -81,6 +81,40 @@ export async function getAttachmentSignedUrl(path) {
   return data.signedUrl
 }
 
+export function isTextAttachment(name = '', mime = '') {
+  const n = String(name || '').toLowerCase()
+  const m = String(mime || '').toLowerCase()
+  return (
+    m.startsWith('text/') ||
+    m === 'application/txt' ||
+    n.endsWith('.txt') ||
+    n.endsWith('.text') ||
+    n.endsWith('.md')
+  )
+}
+
+export async function downloadAttachmentBlob(path) {
+  if (!path) throw new Error('没有附件')
+  const { data, error } = await supabase.storage.from(ATTACH_BUCKET).download(path)
+  if (error) throw error
+  return data
+}
+
+/** 读取 txt 等文本附件；优先 UTF-8，失败再试 GBK（常见网文编码） */
+export async function fetchAttachmentText(path) {
+  const blob = await downloadAttachmentBlob(path)
+  const buf = await blob.arrayBuffer()
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
+  } catch {
+    try {
+      return new TextDecoder('gbk').decode(buf)
+    } catch {
+      return new TextDecoder('utf-8').decode(buf)
+    }
+  }
+}
+
 async function requireUserId() {
   const { data, error } = await supabase.auth.getUser()
   if (error) throw error
