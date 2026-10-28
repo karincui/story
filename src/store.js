@@ -293,6 +293,7 @@ export function searchNovels({ query = '', tags = [] } = {}) {
       n.author.toLowerCase().includes(q) ||
       (n.synopsis || '').toLowerCase().includes(q) ||
       (n.tags || []).some((t) => t.toLowerCase().includes(q))
+    // 未选：不过滤；选 1 个：只保留带该标签；选多个：取交集（须同时含全部所选标签）
     const matchTags = !tags.length || tags.every((t) => (n.tags || []).includes(t))
     return matchQ && matchTags
   })

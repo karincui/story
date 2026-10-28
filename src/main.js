@@ -458,7 +458,14 @@ function renderLibrary() {
         </div>
         ${
           !state.tagManage && state.filterTags.length
-            ? `<div class="clear-wrap"><button class="btn ghost sm" id="clear-filters">清除筛选</button></div>`
+            ? `<div class="clear-wrap">
+                <p class="muted filter-hint">${
+                  state.filterTags.length === 1
+                    ? `已选「${escapeHtml(state.filterTags[0])}」`
+                    : `已选 ${state.filterTags.length} 个标签（取交集）`
+                }</p>
+                <button class="btn ghost sm" id="clear-filters">清除筛选</button>
+              </div>`
             : ''
         }
       </aside>
