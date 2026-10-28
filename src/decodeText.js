@@ -3,7 +3,6 @@ import { Buffer } from 'buffer'
 
 /**
  * 评分：偏爱「常用汉字 + 中文标点」，惩罚 � 与空字节。
- * 注意：错误用 GBK/UTF-8 互解也会产出生僻汉字，不能只数 CJK。
  */
 function scoreDecoded(text) {
   if (!text) return -1e9
@@ -11,7 +10,7 @@ function scoreDecoded(text) {
   const fffd = (sample.match(/\uFFFD/g) || []).length
   const nulls = (sample.match(/\u0000/g) || []).length
   const common = (sample.match(/[的了是我不在人有他这中大来上个们到说对时着她也会过来你能着上下]/g) || []).length
-  const punct = (sample.match(/[。！？、，：；《》…—\n\r""''「」]/g) || []).length
+  const punct = (sample.match(/[。！？、，：；《》…—\n\r""''「」']/g) || []).length
   const cjk = (sample.match(/[\u4e00-\u9fff]/g) || []).length
   const latinJunk = (sample.match(/[A-Za-z]{3,}/g) || []).length
   const commonRatio = cjk > 0 ? common / cjk : 0
@@ -28,7 +27,7 @@ function scoreDecoded(text) {
 
 function tryNative(label, bytes) {
   try {
-    return new TextDecoder(label).decode(bytes)
+    return new TextDecoder(label, { fatal: false }).decode(bytes)
   } catch {
     return null
   }
@@ -68,7 +67,12 @@ export function decodeTextBuffer(arrayBuffer, encoding = 'auto') {
     return { text: tryNative('utf-8', bytes) || '', encoding: 'utf-8' }
   }
   if (encoding === 'gbk') {
-    const text = tryIconv('gb18030', raw) || tryIconv('gbk', raw) || tryNative('gb18030', raw) || tryNative('gbk', raw) || ''
+    const text =
+      tryIconv('gb18030', raw) ||
+      tryIconv('gbk', raw) ||
+      tryNative('gb18030', raw) ||
+      tryNative('gbk', raw) ||
+      ''
     return { text, encoding: 'gbk' }
   }
   if (encoding === 'utf-16le') {
@@ -80,30 +84,33 @@ export function decodeTextBuffer(arrayBuffer, encoding = 'auto') {
     return { text: tryNative('utf-16be', bytes) || '', encoding: 'utf-16be' }
   }
 
-  // auto
   const bom = stripBom(raw)
   if (bom.encoding) {
     const text = tryNative(bom.encoding, bom.bytes) || ''
     return { text, encoding: bom.encoding }
   }
 
-  const bytes = raw
   const candidates = []
   const push = (label, text) => {
     if (text == null) return
     candidates.push({ label, text, score: scoreDecoded(text) })
   }
 
-  push('utf-8', tryNative('utf-8', bytes))
-  push('utf-16le', tryNative('utf-16le', bytes))
-  push('utf-16be', tryNative('utf-16be', bytes))
-  push('gb18030', tryIconv('gb18030', bytes) || tryNative('gb18030', bytes))
-  push('gbk', tryIconv('gbk', bytes) || tryNative('gbk', bytes))
+  push('utf-8', tryNative('utf-8', raw))
+  push('utf-16le', tryNative('utf-16le', raw))
+  push('utf-16be', tryNative('utf-16be', raw))
+  push('gb18030', tryIconv('gb18030', raw) || tryNative('gb18030', raw))
+  push('gbk', tryIconv('gbk', raw) || tryNative('gbk', raw))
 
   candidates.sort((a, b) => b.score - a.score)
   const best = candidates[0]
   return {
-    text: best?.text ?? tryNative('utf-8', bytes) ?? '',
+    text: best?.text ?? tryNative('utf-8', raw) ?? '',
     encoding: best?.label || 'utf-8',
   }
+}
+
+/** 兼容旧调用；解码已随主包加载，无需再动态 import */
+export async function decodeTextBufferAsync(arrayBuffer, encoding = 'auto') {
+  return decodeTextBuffer(arrayBuffer, encoding)
 }

@@ -61,4 +61,9 @@ export default defineConfig({
   optimizeDeps: {
     include: ['buffer', 'iconv-lite', 'string_decoder'],
   },
+  build: {
+    // 兼容较新的 iOS Safari；解码库随主包静态引入，避免点击时再动态加载模块失败
+    target: ['es2020', 'safari14'],
+    modulePreload: { polyfill: true },
+  },
 })

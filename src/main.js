@@ -35,6 +35,7 @@ import {
 } from './backup.js'
 import { listImages, addImages, getImage, deleteImage, deleteImages } from './imageStore.js'
 import { cropImageToFile } from './cropImage.js'
+import { decodeTextBuffer, decodeTextBufferAsync } from './decodeText.js'
 
 const state = {
   page: 'library', // library | import | excel | gallery
@@ -1258,7 +1259,6 @@ function renderTxtReader() {
 async function applyReaderEncoding(encoding) {
   if (!state.readerBuffer) return
   state.readerEncoding = encoding
-  const { decodeTextBuffer } = await import('./decodeText.js')
   const { text, encoding: used } = decodeTextBuffer(state.readerBuffer, encoding)
   state.readerText = text || ''
   state.readerError = text ? '' : '正文为空'
@@ -1400,8 +1400,7 @@ async function openNovelAttachment(novel) {
     mountBusyOverlay()
     try {
       const buf = await fetchAttachmentBuffer(novel.attachmentPath)
-      const { decodeTextBuffer } = await import('./decodeText.js')
-      const { text, encoding } = decodeTextBuffer(buf, 'auto')
+      const { text, encoding } = await decodeTextBufferAsync(buf, 'auto')
       state.readerBuffer = buf
       state.readerEncoding = encoding || 'auto'
       state.readerOpen = true
@@ -1410,13 +1409,19 @@ async function openNovelAttachment(novel) {
       state.readerText = text || ''
       state.readerError = text ? '' : '正文为空'
     } catch (err) {
+      const msg = String(err?.message || err)
+      const friendly = /Importing a module script failed|Failed to fetch dynamically imported module/i.test(
+        msg,
+      )
+        ? '当前手机浏览器加载解码组件失败，请刷新页面后再试；若仍不行，可先用电脑打开该 TXT'
+        : msg
       state.readerOpen = true
       state.readerNovelId = novel.id
       state.readerTitle = novel.title || novel.attachmentName || '阅读'
       state.readerText = ''
       state.readerBuffer = null
-      state.readerError = err.message || String(err)
-      alert(state.readerError)
+      state.readerError = friendly
+      alert(friendly)
     } finally {
       state.actionBusy = false
       unmountBusyOverlay()

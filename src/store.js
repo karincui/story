@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { decodeTextBuffer } from './decodeText.js'
 
 export const PRESET_TAGS = [
   '未读',
@@ -142,7 +143,6 @@ export async function fetchAttachmentBuffer(path) {
 
 /** 读取 txt 等文本附件（自动识别 UTF-8 / UTF-16 / GBK） */
 export async function fetchAttachmentText(path, encoding = 'auto') {
-  const { decodeTextBuffer } = await import('./decodeText.js')
   const buf = await fetchAttachmentBuffer(path)
   return decodeTextBuffer(buf, encoding)
 }
