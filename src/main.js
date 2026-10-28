@@ -728,7 +728,8 @@ function renderImport() {
               : importFiles.length
                 ? `<button class="btn" id="start-ocr">开始识别</button>
                    <button class="btn ghost" id="save-to-gallery" type="button">存入图库</button>
-                   <button class="btn ghost" id="clear-files">清空图片</button>`
+                   <button class="btn ghost" id="clear-files">清空图片</button>
+                   <button class="btn ghost" id="copy-ocr-text" type="button" ${rawOcr.trim() ? '' : 'disabled'}>复制文字</button>`
                 : ''
           }
         </div>
@@ -2303,6 +2304,36 @@ function bindImport() {
     state.importMsg = ''
     render()
   })
+
+  app.querySelector('#copy-ocr-text')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const text = (app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr || '').trim()
+      if (!text) {
+        alert('还没有可复制的文字，请先识别')
+        return
+      }
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text)
+        } else {
+          const ta = document.createElement('textarea')
+          ta.value = text
+          ta.setAttribute('readonly', '')
+          ta.style.position = 'fixed'
+          ta.style.left = '-9999px'
+          document.body.appendChild(ta)
+          ta.select()
+          document.execCommand('copy')
+          ta.remove()
+        }
+        state.importMsg = '已复制识别文字'
+        render()
+      } catch (err) {
+        alert(`复制失败：${err.message || err}`)
+      }
+    }),
+  )
 
   app.querySelector('#save-to-gallery')?.addEventListener(
     'click',
