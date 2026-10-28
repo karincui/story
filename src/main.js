@@ -1109,10 +1109,7 @@ function bindEvents() {
         const novel = getNovel(btn.dataset.openAttach)
         if (!novel?.attachmentPath) return
         try {
-          await runBusy('打开附件…', async () => {
-            const url = await getAttachmentSignedUrl(novel.attachmentPath)
-            window.open(url, '_blank', 'noopener,noreferrer')
-          })
+          await openNovelAttachment(novel)
         } catch (err) {
           alert(err.message || String(err))
         }
