@@ -45,7 +45,7 @@ const state = {
   readFilter: 'all',
   tagManage: false,
   /** 标签筛选面板是否展开 */
-  tagsPanelOpen: localStorage.getItem('novel-tags-panel-open') === '1',
+  tagsPanelOpen: localStorage.getItem('novel-tags-panel-open') !== '0',
   sortMode: false,
   editingId: null,
   importFiles: [],
