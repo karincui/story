@@ -1609,6 +1609,21 @@ button {
   font-size: 0.78rem;
 }
 
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 8px 0 4px;
+}
+
+.pager-info {
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
 .crop-backdrop {
   z-index: 70;
   padding: 12px;
