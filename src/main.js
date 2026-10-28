@@ -2308,7 +2308,7 @@ function bindImport() {
   app.querySelector('#copy-ocr-text')?.addEventListener(
     'click',
     withClickGuard(async () => {
-      const text = (app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr || '').trim()
+      const text = (app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr ?? '').trim()
       if (!text) {
         alert('还没有可复制的文字，请先识别')
         return
