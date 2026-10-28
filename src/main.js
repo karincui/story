@@ -1677,15 +1677,19 @@ function bindEvents() {
 
   const mdInput = app.querySelector('#import-md-input')
   app.querySelector('#import-md')?.addEventListener('click', () => mdInput?.click())
-  mdInput?.addEventListener('change', async () => {
-    const file = mdInput.files?.[0]
-    mdInput.value = ''
-    if (!file) return
-    try {
-      await runBusy('读取 MD…', async () => {
+  mdInput?.addEventListener(
+    'change',
+    withClickGuard(async () => {
+      const file = mdInput.files?.[0]
+      mdInput.value = ''
+      if (!file) return
+      try {
         const text = await file.text()
         const rows = parseWishlistMarkdown(text)
-        if (!rows.length) throw new Error('没有解析出书目，请确认是本站导出的 MD 格式')
+        if (!rows.length) {
+          alert('没有解析出书目，请确认是本站导出的 MD 格式')
+          return
+        }
         const existing = new Set(
           searchNovels({ readFilter: 'all' }).map((n) => `${n.title}||${n.author || ''}`),
         )
@@ -1704,31 +1708,35 @@ function bindEvents() {
         }
         let ok = 0
         const failed = []
-        for (const d of toAdd) {
-          try {
-            await upsertNovel({
-              title: d.title,
-              author: d.author,
-              synopsis: d.synopsis,
-              tags: d.tags?.length ? d.tags : ['未读'],
-            })
-            ok += 1
-          } catch (err) {
-            failed.push(`${d.title}：${err.message || err}`)
+        await runBusy(`导入中 0/${toAdd.length}…`, async () => {
+          for (const d of toAdd) {
+            try {
+              await upsertNovel({
+                title: d.title,
+                author: d.author,
+                synopsis: d.synopsis,
+                tags: d.tags?.length ? d.tags : ['未读'],
+              })
+              ok += 1
+              state.actionBusyLabel = `导入中 ${ok}/${toAdd.length}…`
+              mountBusyOverlay()
+            } catch (err) {
+              failed.push(`${d.title}：${err.message || err}`)
+            }
           }
-        }
-        await refreshStore()
+          await refreshStore()
+        })
         if (failed.length) {
           alert(`已导入 ${ok} 本，失败 ${failed.length} 本：\n${failed.slice(0, 5).join('\n')}`)
         } else {
           alert(`已恢复导入 ${ok} 本`)
         }
-      })
-      render()
-    } catch (err) {
-      alert(err.message || String(err))
-    }
-  })
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
 
   app.querySelectorAll('[data-edit]').forEach((btn) => {
     btn.addEventListener(
