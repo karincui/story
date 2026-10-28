@@ -12,7 +12,7 @@ import {
   moveNovelInView,
   refreshStore,
 } from './store.js'
-import { getSession, signInWithEmail, signOut, onAuthChange } from './auth.js'
+import { getSession, signInWithPassword, signUpWithPassword, signOut, onAuthChange } from './auth.js'
 import { migrateLocalIfNeeded } from './migrateLocal.js'
 import { recognizeImages } from './ocr.js'
 import { parseOcrText } from './parseBooks.js'
@@ -44,7 +44,9 @@ const state = {
   galleryMsg: '',
   authReady: false,
   user: null,
+  authMode: 'login', // login | register
   authEmail: '',
+  authPassword: '',
   authMsg: '',
   authBusy: false,
   storeReady: false,
@@ -247,19 +249,29 @@ function render() {
 }
 
 function renderAuth() {
+  const isRegister = state.authMode === 'register'
   return `
     <div class="auth-shell">
       <div class="auth-card">
         <h1 class="brand">书单识图</h1>
         <p class="brand-sub">登录后书单保存在云端，电脑和手机都能用</p>
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab ${!isRegister ? 'active' : ''}" id="auth-tab-login" ${state.authBusy ? 'disabled' : ''}>登录</button>
+          <button type="button" class="auth-tab ${isRegister ? 'active' : ''}" id="auth-tab-register" ${state.authBusy ? 'disabled' : ''}>注册</button>
+        </div>
         <label class="auth-label" for="auth-email">邮箱</label>
         <input class="search-input" id="auth-email" type="email" autocomplete="email"
           placeholder="you@example.com" value="${escapeHtml(state.authEmail)}" ${state.authBusy ? 'disabled' : ''} />
-        <button class="btn" id="auth-send" type="button" ${state.authBusy ? 'disabled' : ''}>
-          ${state.authBusy ? '发送中…' : '发送登录链接'}
+        <label class="auth-label" for="auth-password">密码</label>
+        <input class="search-input" id="auth-password" type="password"
+          autocomplete="${isRegister ? 'new-password' : 'current-password'}"
+          placeholder="${isRegister ? '至少 6 位' : '密码'}"
+          value="${escapeHtml(state.authPassword)}" ${state.authBusy ? 'disabled' : ''} />
+        <button class="btn" id="auth-submit" type="button" ${state.authBusy ? 'disabled' : ''}>
+          ${state.authBusy ? '请稍候…' : isRegister ? '注册并登录' : '登录'}
         </button>
         ${state.authMsg ? `<p class="auth-msg">${escapeHtml(state.authMsg)}</p>` : ''}
-        <p class="muted auth-hint">打开邮箱里的链接即可登录（Magic Link，无需密码）</p>
+        <p class="muted auth-hint">${isRegister ? '注册后可用同一邮箱密码在各设备登录' : '没有账号？点上方「注册」'}</p>
       </div>
     </div>
   `
@@ -267,23 +279,57 @@ function renderAuth() {
 
 function bindAuth() {
   const emailEl = app.querySelector('#auth-email')
+  const passwordEl = app.querySelector('#auth-password')
   emailEl?.addEventListener('input', () => {
     state.authEmail = emailEl.value
   })
-  app.querySelector('#auth-send')?.addEventListener('click', async () => {
+  passwordEl?.addEventListener('input', () => {
+    state.authPassword = passwordEl.value
+  })
+  app.querySelector('#auth-tab-login')?.addEventListener('click', () => {
+    state.authMode = 'login'
+    state.authMsg = ''
+    render()
+  })
+  app.querySelector('#auth-tab-register')?.addEventListener('click', () => {
+    state.authMode = 'register'
+    state.authMsg = ''
+    render()
+  })
+  app.querySelector('#auth-submit')?.addEventListener('click', async () => {
     const email = (emailEl?.value || state.authEmail || '').trim()
+    const password = passwordEl?.value ?? state.authPassword
     if (!email) {
       state.authMsg = '请填写邮箱'
+      render()
+      return
+    }
+    if (!password || password.length < 6) {
+      state.authMsg = '密码至少 6 位'
       render()
       return
     }
     state.authBusy = true
     state.authMsg = ''
     state.authEmail = email
+    state.authPassword = password
     render()
     try {
-      await signInWithEmail(email)
-      state.authMsg = '已发送，请到邮箱点开链接（也可看垃圾箱）'
+      if (state.authMode === 'register') {
+        const data = await signUpWithPassword(email, password)
+        if (data?.session) {
+          state.authPassword = ''
+          state.authMsg = ''
+        } else {
+          state.authMsg =
+            '注册成功。若未自动登录，请到邮箱点确认链接，或在 Supabase 关闭「Confirm email」后直接登录'
+          state.authMode = 'login'
+        }
+      } else {
+        await signInWithPassword(email, password)
+        state.authPassword = ''
+        state.authMsg = ''
+      }
     } catch (err) {
       state.authMsg = err.message || String(err)
     } finally {

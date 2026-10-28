@@ -12,15 +12,23 @@ export async function getUser() {
   return data.user
 }
 
-/** 发送 Magic Link 到邮箱 */
-export async function signInWithEmail(email) {
-  const { error } = await supabase.auth.signInWithOtp({
+/** 邮箱 + 密码登录 */
+export async function signInWithPassword(email, password) {
+  const { error } = await supabase.auth.signInWithPassword({
     email: email.trim(),
-    options: {
-      emailRedirectTo: window.location.origin,
-    },
+    password,
   })
   if (error) throw error
+}
+
+/** 注册新账号（邮箱 + 密码） */
+export async function signUpWithPassword(email, password) {
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+  })
+  if (error) throw error
+  return data
 }
 
 export async function signOut() {
