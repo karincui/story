@@ -703,7 +703,7 @@ function renderImport() {
   return `
     <div class="page-head">
       <h2>截图导入</h2>
-      <p class="muted">识别后先核对原文，再手动生成条目入库</p>
+      <p class="muted">识别在手机/浏览器本地跑，首次会下载中文字库，可能要等一会儿；裁小图、少张图会更快</p>
     </div>
     <div class="import-layout">
       <section>
@@ -2417,6 +2417,8 @@ function bindCropModal() {
 
 function bindImport() {
   if (state.page !== 'import') return
+  // 进入截图页就预加载字库，避免点「开始识别」才开始下
+  preloadOcr()
 
   app.querySelectorAll('[data-batch-toggle]').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -2594,17 +2596,18 @@ function bindImport() {
       try {
         await runBusy('识别中…', async () => {
           const files = state.importFiles.map((f) => f.file)
-          const results = await recognizeImages(files, ({ index, total, progress, name }) => {
+          const results = await recognizeImages(files, ({ index, total, progress, name, label }) => {
+            const phase = label ? ` · ${label}` : ''
             state.progress = {
-              label: `识别 ${index + 1}/${total}：${name}（${progress}%）`,
+              label: `第 ${index + 1}/${total} 张「${name}」${phase}（${progress}%）`,
               pct: Math.round(((index + progress / 100) / total) * 100),
             }
             state.actionBusyLabel = state.progress.label
             mountBusyOverlay()
             const bar = app.querySelector('.progress-bar > span')
-            const label = app.querySelector('.progress-meta')
+            const meta = app.querySelector('.progress-meta')
             if (bar) bar.style.width = `${state.progress.pct}%`
-            if (label) label.textContent = state.progress.label
+            if (meta) meta.textContent = state.progress.label
           })
           state.rawOcr = results.map((r) => `【${r.name}】\n${r.text}`).join('\n\n')
           state.importDrafts = []
