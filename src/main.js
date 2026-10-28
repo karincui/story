@@ -49,8 +49,66 @@ const state = {
   authPassword: '',
   authMsg: '',
   authBusy: false,
+  actionBusy: false,
+  actionBusyLabel: '',
   storeReady: false,
   storeError: '',
+}
+
+/** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
+async function runBusy(label, fn) {
+  if (state.actionBusy || state.authBusy) return
+  state.actionBusy = true
+  state.actionBusyLabel = label || '处理中…'
+  mountBusyOverlay()
+  try {
+    return await fn()
+  } finally {
+    state.actionBusy = false
+    state.actionBusyLabel = ''
+    unmountBusyOverlay()
+  }
+}
+
+function mountBusyOverlay() {
+  let el = document.getElementById('global-busy')
+  if (!el) {
+    el = document.createElement('div')
+    el.id = 'global-busy'
+    el.className = 'busy-overlay'
+    el.setAttribute('aria-live', 'polite')
+    el.setAttribute('aria-busy', 'true')
+    document.body.appendChild(el)
+  }
+  el.innerHTML = `<div class="busy-card"><span class="busy-spinner"></span><span>${escapeHtml(state.actionBusyLabel)}</span></div>`
+}
+
+function unmountBusyOverlay() {
+  document.getElementById('global-busy')?.remove()
+}
+
+function debounce(fn, ms = 250) {
+  let t = 0
+  return (...args) => {
+    clearTimeout(t)
+    t = window.setTimeout(() => fn(...args), ms)
+  }
+}
+
+/** 同步操作短防抖，避免连点 */
+function withClickGuard(fn, ms = 400) {
+  let locked = false
+  return (...args) => {
+    if (locked || state.actionBusy || state.authBusy) return
+    locked = true
+    Promise.resolve()
+      .then(() => fn(...args))
+      .finally(() => {
+        window.setTimeout(() => {
+          locked = false
+        }, ms)
+      })
+  }
 }
 
 function revokeGalleryPreviews() {
@@ -200,7 +258,10 @@ function render() {
         <p class="muted">${state.storeError ? escapeHtml(state.storeError) : '正在加载书单…'}</p>
         ${state.storeError ? `<button class="btn" id="retry-store" type="button">重试</button>` : ''}
       </div>`
-    app.querySelector('#retry-store')?.addEventListener('click', () => bootStore())
+    app.querySelector('#retry-store')?.addEventListener(
+      'click',
+      withClickGuard(() => bootStore()),
+    )
     return
   }
 
@@ -298,47 +359,53 @@ function bindAuth() {
     state.authMsg = ''
     render()
   })
-  app.querySelector('#auth-submit')?.addEventListener('click', async () => {
-    const email = (emailEl?.value || state.authEmail || '').trim()
-    const password = passwordEl?.value ?? state.authPassword
-    if (!email) {
-      state.authMsg = '请填写邮箱'
+  app.querySelector('#auth-submit')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const email = (emailEl?.value || state.authEmail || '').trim()
+      const password = passwordEl?.value ?? state.authPassword
+      if (!email) {
+        state.authMsg = '请填写邮箱'
+        render()
+        return
+      }
+      if (!password || password.length < 6) {
+        state.authMsg = '密码至少 6 位'
+        render()
+        return
+      }
+      state.authBusy = true
+      state.authMsg = ''
+      state.authEmail = email
+      state.authPassword = password
+      state.actionBusyLabel = state.authMode === 'register' ? '注册中…' : '登录中…'
       render()
-      return
-    }
-    if (!password || password.length < 6) {
-      state.authMsg = '密码至少 6 位'
-      render()
-      return
-    }
-    state.authBusy = true
-    state.authMsg = ''
-    state.authEmail = email
-    state.authPassword = password
-    render()
-    try {
-      if (state.authMode === 'register') {
-        const data = await signUpWithPassword(email, password)
-        if (data?.session) {
+      mountBusyOverlay()
+      try {
+        if (state.authMode === 'register') {
+          const data = await signUpWithPassword(email, password)
+          if (data?.session) {
+            state.authPassword = ''
+            state.authMsg = ''
+          } else {
+            state.authMsg =
+              '注册成功。若未自动登录，请到邮箱点确认链接，或在 Supabase 关闭「Confirm email」后直接登录'
+            state.authMode = 'login'
+          }
+        } else {
+          await signInWithPassword(email, password)
           state.authPassword = ''
           state.authMsg = ''
-        } else {
-          state.authMsg =
-            '注册成功。若未自动登录，请到邮箱点确认链接，或在 Supabase 关闭「Confirm email」后直接登录'
-          state.authMode = 'login'
         }
-      } else {
-        await signInWithPassword(email, password)
-        state.authPassword = ''
-        state.authMsg = ''
+      } catch (err) {
+        state.authMsg = err.message || String(err)
+      } finally {
+        state.authBusy = false
+        unmountBusyOverlay()
+        render()
       }
-    } catch (err) {
-      state.authMsg = err.message || String(err)
-    } finally {
-      state.authBusy = false
-      render()
-    }
-  })
+    }),
+  )
 }
 
 async function bootStore() {
@@ -737,26 +804,30 @@ function renderModal() {
 
 function bindEvents() {
   app.querySelectorAll('[data-nav]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const page = btn.dataset.nav
-      state.page = page
-      state.importMsg = ''
-      state.galleryMsg = ''
-      state.galleryPreviewId = null
-      if (page === 'gallery') {
-        state.galleryLoading = true
+    btn.addEventListener(
+      'click',
+      withClickGuard(async () => {
+        const page = btn.dataset.nav
+        state.page = page
+        state.importMsg = ''
+        state.galleryMsg = ''
+        state.galleryPreviewId = null
+        if (page === 'gallery') {
+          await runBusy('加载图库…', async () => {
+            state.galleryLoading = true
+            render()
+            await loadGallery()
+          })
+        }
         render()
-        await loadGallery()
-      }
-      render()
-    })
+      }),
+    )
   })
 
   const search = app.querySelector('#search')
   if (search) {
-    search.addEventListener('input', () => {
+    const onSearch = debounce(() => {
       state.query = search.value
-      // Soft re-render of list only would be nicer; full render is fine for local size
       const sel = search.selectionStart
       render()
       const again = app.querySelector('#search')
@@ -764,7 +835,8 @@ function bindEvents() {
         again.focus()
         again.setSelectionRange(sel, sel)
       }
-    })
+    }, 220)
+    search.addEventListener('input', onSearch)
   }
 
   app.querySelector('#toggle-tag-manage')?.addEventListener('click', () => {
@@ -778,50 +850,62 @@ function bindEvents() {
   })
 
   app.querySelectorAll('[data-sort]').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation()
-      const id = btn.dataset.sortId
-      const action = btn.dataset.sort
-      const visibleIds = [...app.querySelectorAll('.novel-list .swipe-item')].map((el) => el.dataset.id)
-      try {
-        if (await moveNovelInView(visibleIds, id, action)) render()
-      } catch (err) {
-        alert(err.message || String(err))
-      }
-    })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.stopPropagation()
+        const id = btn.dataset.sortId
+        const action = btn.dataset.sort
+        const visibleIds = [...app.querySelectorAll('.novel-list .swipe-item')].map((el) => el.dataset.id)
+        try {
+          const moved = await runBusy('排序中…', () => moveNovelInView(visibleIds, id, action))
+          if (moved) render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
+      }),
+    )
   })
 
   app.querySelectorAll('[data-filter-tag]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const t = btn.dataset.filterTag
-      if (state.filterTags.includes(t)) {
-        state.filterTags = state.filterTags.filter((x) => x !== t)
-      } else {
-        state.filterTags = [...state.filterTags, t]
-      }
-      render()
-    })
+    btn.addEventListener(
+      'click',
+      withClickGuard(() => {
+        const t = btn.dataset.filterTag
+        if (state.filterTags.includes(t)) {
+          state.filterTags = state.filterTags.filter((x) => x !== t)
+        } else {
+          state.filterTags = [...state.filterTags, t]
+        }
+        render()
+      }),
+    )
   })
 
   app.querySelectorAll('[data-del-tag]').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation()
-      const t = btn.dataset.delTag
-      const used = countNovelsWithTag(t)
-      const msg =
-        used > 0
-          ? `确定删除标签「${t}」？\n将从 ${used} 本小说上移除该标签。`
-          : `确定删除标签「${t}」？`
-      if (!(await askConfirm(msg))) return
-      try {
-        await deleteTag(t)
-        state.filterTags = state.filterTags.filter((x) => x !== t)
-        state.batchTags = (state.batchTags || []).filter((x) => x !== t)
-        render()
-      } catch (err) {
-        alert(err.message || String(err))
-      }
-    })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.stopPropagation()
+        const t = btn.dataset.delTag
+        const used = countNovelsWithTag(t)
+        const msg =
+          used > 0
+            ? `确定删除标签「${t}」？\n将从 ${used} 本小说上移除该标签。`
+            : `确定删除标签「${t}」？`
+        if (!(await askConfirm(msg))) return
+        try {
+          await runBusy('删除标签…', async () => {
+            await deleteTag(t)
+            state.filterTags = state.filterTags.filter((x) => x !== t)
+            state.batchTags = (state.batchTags || []).filter((x) => x !== t)
+          })
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
+      }),
+    )
   })
 
   app.querySelector('#clear-filters')?.addEventListener('click', () => {
@@ -829,61 +913,76 @@ function bindEvents() {
     render()
   })
 
-  app.querySelector('#add-tag')?.addEventListener('click', async () => {
-    const name = await askText('新标签名称')
-    if (name?.trim()) {
-      try {
-        await addCustomTag(name.trim())
-        render()
-      } catch (err) {
-        alert(err.message || String(err))
-      }
-    }
-  })
-
-  const openAddNovel = () => {
-    state.editingId = 'new'
-    render()
-  }
-  app.querySelector('#add-novel')?.addEventListener('click', openAddNovel)
-  app.querySelector('#add-novel-primary')?.addEventListener('click', openAddNovel)
-  app.querySelector('#add-novel-empty')?.addEventListener('click', openAddNovel)
-
-  app.querySelector('#sign-out')?.addEventListener('click', async () => {
-    await signOut()
-  })
-
-  app.querySelector('#export-md')?.addEventListener('click', () => {
-    const novels = searchNovels({ query: state.query, tags: state.filterTags })
-    const md = exportMarkdown(novels)
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = '想看小说库.md'
-    a.click()
-    URL.revokeObjectURL(a.href)
-  })
-
-  app.querySelectorAll('[data-edit]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation()
-      state.editingId = btn.dataset.edit
-      render()
-    })
-  })
-
-  app.querySelectorAll('[data-del]').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation()
-      if (await askConfirm('确定删除这本小说？')) {
+  app.querySelector('#add-tag')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const name = await askText('新标签名称')
+      if (name?.trim()) {
         try {
-          await deleteNovel(btn.dataset.del)
+          await runBusy('添加标签…', () => addCustomTag(name.trim()))
           render()
         } catch (err) {
           alert(err.message || String(err))
         }
       }
-    })
+    }),
+  )
+
+  const openAddNovel = withClickGuard(() => {
+    state.editingId = 'new'
+    render()
+  })
+  app.querySelector('#add-novel')?.addEventListener('click', openAddNovel)
+  app.querySelector('#add-novel-primary')?.addEventListener('click', openAddNovel)
+  app.querySelector('#add-novel-empty')?.addEventListener('click', openAddNovel)
+
+  app.querySelector('#sign-out')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      await runBusy('退出中…', () => signOut())
+    }),
+  )
+
+  app.querySelector('#export-md')?.addEventListener(
+    'click',
+    withClickGuard(() => {
+      const novels = searchNovels({ query: state.query, tags: state.filterTags })
+      const md = exportMarkdown(novels)
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = '想看小说库.md'
+      a.click()
+      URL.revokeObjectURL(a.href)
+    }),
+  )
+
+  app.querySelectorAll('[data-edit]').forEach((btn) => {
+    btn.addEventListener(
+      'click',
+      withClickGuard((e) => {
+        e.stopPropagation()
+        state.editingId = btn.dataset.edit
+        render()
+      }),
+    )
+  })
+
+  app.querySelectorAll('[data-del]').forEach((btn) => {
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.stopPropagation()
+        if (await askConfirm('确定删除这本小说？')) {
+          try {
+            await runBusy('删除中…', () => deleteNovel(btn.dataset.del))
+            render()
+          } catch (err) {
+            alert(err.message || String(err))
+          }
+        }
+      }),
+    )
   })
 
   bindSwipe()
@@ -934,65 +1033,82 @@ function bindGallery() {
   })
 
   app.querySelectorAll('[data-gallery-del]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.galleryDel
-      if (!(await askConfirm('确定从本机图库删除这张图？'))) return
-      await deleteImage(id)
-      state.gallerySelected = state.gallerySelected.filter((x) => x !== id)
-      if (state.galleryPreviewId === id) state.galleryPreviewId = null
-      state.galleryMsg = '已删除'
-      await loadGallery()
-      render()
-    })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async () => {
+        const id = btn.dataset.galleryDel
+        if (!(await askConfirm('确定从本机图库删除这张图？'))) return
+        await runBusy('删除中…', async () => {
+          await deleteImage(id)
+          state.gallerySelected = state.gallerySelected.filter((x) => x !== id)
+          if (state.galleryPreviewId === id) state.galleryPreviewId = null
+          state.galleryMsg = '已删除'
+          await loadGallery()
+        })
+        render()
+      }),
+    )
   })
 
-  app.querySelector('#gallery-del-selected')?.addEventListener('click', async () => {
-    const ids = [...state.gallerySelected]
-    if (!ids.length) return
-    if (!(await askConfirm(`确定删除所选 ${ids.length} 张图？`))) return
-    await deleteImages(ids)
-    state.gallerySelected = []
-    state.galleryPreviewId = null
-    state.galleryMsg = `已删除 ${ids.length} 张`
-    await loadGallery()
-    render()
-  })
-
-  app.querySelector('#gallery-use-import')?.addEventListener('click', async () => {
-    const ids = [...state.gallerySelected]
-    if (!ids.length) return
-    const next = []
-    for (const id of ids) {
-      const row = await getImage(id)
-      if (!row?.blob) continue
-      const file = new File([row.blob], row.name || `截图-${id}.png`, {
-        type: row.type || 'image/png',
+  app.querySelector('#gallery-del-selected')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const ids = [...state.gallerySelected]
+      if (!ids.length) return
+      if (!(await askConfirm(`确定删除所选 ${ids.length} 张图？`))) return
+      await runBusy('删除中…', async () => {
+        await deleteImages(ids)
+        state.gallerySelected = []
+        state.galleryPreviewId = null
+        state.galleryMsg = `已删除 ${ids.length} 张`
+        await loadGallery()
       })
-      next.push({ file, preview: URL.createObjectURL(row.blob) })
-    }
-    if (!next.length) {
-      state.galleryMsg = '未能读取所选图片'
       render()
-      return
-    }
-    state.importFiles.forEach((f) => URL.revokeObjectURL(f.preview))
-    state.importFiles = next
-    state.importDrafts = []
-    state.rawOcr = ''
-    state.importMsg = `已从图库载入 ${next.length} 张，可开始识别`
-    state.gallerySelected = []
-    state.galleryPreviewId = null
-    state.page = 'import'
-    render()
-  })
+    }),
+  )
+
+  app.querySelector('#gallery-use-import')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const ids = [...state.gallerySelected]
+      if (!ids.length) return
+      await runBusy('载入图片…', async () => {
+        const next = []
+        for (const id of ids) {
+          const row = await getImage(id)
+          if (!row?.blob) continue
+          const file = new File([row.blob], row.name || `截图-${id}.png`, {
+            type: row.type || 'image/png',
+          })
+          next.push({ file, preview: URL.createObjectURL(row.blob) })
+        }
+        if (!next.length) {
+          state.galleryMsg = '未能读取所选图片'
+          return
+        }
+        state.importFiles.forEach((f) => URL.revokeObjectURL(f.preview))
+        state.importFiles = next
+        state.importDrafts = []
+        state.rawOcr = ''
+        state.importMsg = `已从图库载入 ${next.length} 张，可开始识别`
+        state.gallerySelected = []
+        state.galleryPreviewId = null
+        state.page = 'import'
+      })
+      render()
+    }),
+  )
 }
 
 function bindExcel() {
   if (state.page !== 'excel') return
 
-  app.querySelector('#excel-template')?.addEventListener('click', () => {
-    downloadExcelTemplate()
-  })
+  app.querySelector('#excel-template')?.addEventListener(
+    'click',
+    withClickGuard(() => {
+      downloadExcelTemplate()
+    }),
+  )
 
   const input = app.querySelector('#excel-input')
   app.querySelector('#excel-pick')?.addEventListener('click', () => input?.click())
@@ -1001,9 +1117,11 @@ function bindExcel() {
     input.value = ''
     if (!file) return
     try {
-      const { rows, sheetName, mapping } = await parseExcelFile(file)
-      state.excelDrafts = rows
-      state.excelInfo = `已读取「${file.name}」工作表 ${sheetName} · ${rows.length} 条 · 列映射：书名=${mapping.titleKey}${mapping.authorKey ? `，作者=${mapping.authorKey}` : ''}${mapping.tagsKey ? `，标签=${mapping.tagsKey}` : ''}`
+      await runBusy('读取表格…', async () => {
+        const { rows, sheetName, mapping } = await parseExcelFile(file)
+        state.excelDrafts = rows
+        state.excelInfo = `已读取「${file.name}」工作表 ${sheetName} · ${rows.length} 条 · 列映射：书名=${mapping.titleKey}${mapping.authorKey ? `，作者=${mapping.authorKey}` : ''}${mapping.tagsKey ? `，标签=${mapping.tagsKey}` : ''}`
+      })
       render()
     } catch (err) {
       alert(err.message || String(err))
@@ -1040,38 +1158,43 @@ function bindExcel() {
     render()
   })
 
-  app.querySelector('#excel-save-all')?.addEventListener('click', async () => {
-    if (state.excelImporting) return
-    state.excelImporting = true
-    render()
-    let ok = 0
-    const failed = []
-    for (const d of state.excelDrafts) {
+  app.querySelector('#excel-save-all')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      if (state.excelImporting || !state.excelDrafts.length) return
+      state.excelImporting = true
+      render()
+      let ok = 0
+      const failed = []
       try {
-        await upsertNovel({
-          title: d.title,
-          author: d.author,
-          synopsis: d.synopsis,
-          tags: d.tags?.length ? d.tags : ['未读'],
+        await runBusy('入库中…', async () => {
+          for (const d of state.excelDrafts) {
+            try {
+              await upsertNovel({
+                title: d.title,
+                author: d.author,
+                synopsis: d.synopsis,
+                tags: d.tags?.length ? d.tags : ['未读'],
+              })
+              ok++
+            } catch {
+              failed.push(d)
+            }
+          }
+          state.excelDrafts = failed
+          state.excelInfo = failed.length
+            ? `成功 ${ok} 条，失败 ${failed.length} 条（多半缺书名），请改后重试`
+            : `成功入库 ${ok} 条`
+          if (!failed.length) state.page = 'library'
         })
-        ok++
-      } catch {
-        failed.push(d)
+      } finally {
+        state.excelImporting = false
       }
-    }
-    state.excelDrafts = failed
-    state.excelImporting = false
-    state.excelInfo = failed.length
-      ? `成功 ${ok} 条，失败 ${failed.length} 条（多半缺书名），请改后重试`
-      : `成功入库 ${ok} 条`
-    if (!failed.length) {
-      alert(`已导入 ${ok} 本小说`)
-      state.page = 'library'
-    } else {
-      alert(`成功 ${ok} 条，还有 ${failed.length} 条未入库`)
-    }
-    render()
-  })
+      if (!failed.length) alert(`已导入 ${ok} 本小说`)
+      else alert(`成功 ${ok} 条，还有 ${failed.length} 条未入库`)
+      render()
+    }),
+  )
 }
 
 const SWIPE_OPEN = -128
@@ -1232,11 +1355,13 @@ function bindModal() {
     })
   })
 
-  app.querySelector('#modal-add-tag')?.addEventListener('click', async () => {
+  app.querySelector('#modal-add-tag')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
     const name = await askText('新标签名称')
     if (!name?.trim()) return
     try {
-      await addCustomTag(name.trim())
+      await runBusy('添加标签…', () => addCustomTag(name.trim()))
     } catch (err) {
       alert(err.message || String(err))
       return
@@ -1263,9 +1388,12 @@ function bindModal() {
         else b.classList.remove('active')
       })
     })
-  })
+  }),
+  )
 
-  app.querySelector('#modal-save')?.addEventListener('click', async () => {
+  app.querySelector('#modal-save')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
     const title = app.querySelector('#f-title').value
     const author = app.querySelector('#f-author').value
     const synopsis = app.querySelector('#f-synopsis').value
@@ -1273,21 +1401,28 @@ function bindModal() {
       .map((b) => b.dataset.toggleTag)
       .filter(Boolean)
     try {
-      await upsertNovel({
-        id: state.editingId === 'new' ? undefined : state.editingId,
-        title,
-        author,
-        synopsis,
-        tags,
+      await runBusy('保存中…', async () => {
+        await upsertNovel({
+          id: state.editingId === 'new' ? undefined : state.editingId,
+          title,
+          author,
+          synopsis,
+          tags,
+        })
+        state.editingId = null
       })
-      state.editingId = null
       render()
     } catch (err) {
       const el = app.querySelector('#form-error')
-      el.hidden = false
-      el.textContent = err.message
+      if (el) {
+        el.hidden = false
+        el.textContent = err.message
+      } else {
+        alert(err.message || String(err))
+      }
     }
-  })
+  }),
+  )
 }
 
 function bindImport() {
@@ -1305,18 +1440,21 @@ function bindImport() {
     })
   })
 
-  app.querySelector('#batch-add-tag')?.addEventListener('click', async () => {
-    const name = await askText('新标签名称')
-    if (!name?.trim()) return
-    const t = name.trim()
-    try {
-      await addCustomTag(t)
-      if (!state.batchTags.includes(t)) state.batchTags = [...state.batchTags, t]
-      render()
-    } catch (err) {
-      alert(err.message || String(err))
-    }
-  })
+  app.querySelector('#batch-add-tag')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const name = await askText('新标签名称')
+      if (!name?.trim()) return
+      const t = name.trim()
+      try {
+        await runBusy('添加标签…', () => addCustomTag(t))
+        if (!state.batchTags.includes(t)) state.batchTags = [...state.batchTags, t]
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
 
   app.querySelector('#batch-tags-clear')?.addEventListener('click', () => {
     state.batchTags = []
@@ -1380,18 +1518,22 @@ function bindImport() {
     render()
   })
 
-  app.querySelector('#save-to-gallery')?.addEventListener('click', async () => {
-    if (!state.importFiles.length) return
-    const files = state.importFiles.map((f) => f.file)
-    try {
-      const ids = await addImages(files)
-      state.importMsg = `已存入图库 ${ids.length} 张`
+  app.querySelector('#save-to-gallery')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      if (!state.importFiles.length) return
+      const files = state.importFiles.map((f) => f.file)
+      try {
+        await runBusy('存入图库…', async () => {
+          const ids = await addImages(files)
+          state.importMsg = `已存入图库 ${ids.length} 张`
+        })
+      } catch (err) {
+        state.importMsg = `存图失败：${err.message || err}`
+      }
       render()
-    } catch (err) {
-      state.importMsg = `存图失败：${err.message || err}`
-      render()
-    }
-  })
+    }),
+  )
 
   app.querySelectorAll('[data-rm-file]').forEach((img) => {
     img.addEventListener('click', () => {
@@ -1402,33 +1544,39 @@ function bindImport() {
     })
   })
 
-  app.querySelector('#start-ocr')?.addEventListener('click', async () => {
-    if (!state.importFiles.length || state.recognizing) return
-    state.recognizing = true
-    state.progress = { label: '准备识别…', pct: 0 }
-    render()
-    try {
-      const files = state.importFiles.map((f) => f.file)
-      const results = await recognizeImages(files, ({ index, total, progress, name }) => {
-        state.progress = {
-          label: `识别 ${index + 1}/${total}：${name}（${progress}%）`,
-          pct: Math.round(((index + progress / 100) / total) * 100),
-        }
-        const bar = app.querySelector('.progress-bar > span')
-        const label = app.querySelector('.progress-meta')
-        if (bar) bar.style.width = `${state.progress.pct}%`
-        if (label) label.textContent = state.progress.label
-      })
-      // 只出原文，不自动生成条目；人工核验后再点「生成条目」
-      state.rawOcr = results.map((r) => `【${r.name}】\n${r.text}`).join('\n\n')
-      state.importDrafts = []
-    } catch (err) {
-      alert(`识别失败：${err.message || err}`)
-    } finally {
-      state.recognizing = false
+  app.querySelector('#start-ocr')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      if (!state.importFiles.length || state.recognizing) return
+      state.recognizing = true
+      state.progress = { label: '准备识别…', pct: 0 }
       render()
-    }
-  })
+      try {
+        await runBusy('识别中…', async () => {
+          const files = state.importFiles.map((f) => f.file)
+          const results = await recognizeImages(files, ({ index, total, progress, name }) => {
+            state.progress = {
+              label: `识别 ${index + 1}/${total}：${name}（${progress}%）`,
+              pct: Math.round(((index + progress / 100) / total) * 100),
+            }
+            state.actionBusyLabel = state.progress.label
+            mountBusyOverlay()
+            const bar = app.querySelector('.progress-bar > span')
+            const label = app.querySelector('.progress-meta')
+            if (bar) bar.style.width = `${state.progress.pct}%`
+            if (label) label.textContent = state.progress.label
+          })
+          state.rawOcr = results.map((r) => `【${r.name}】\n${r.text}`).join('\n\n')
+          state.importDrafts = []
+        })
+      } catch (err) {
+        alert(`识别失败：${err.message || err}`)
+      } finally {
+        state.recognizing = false
+        render()
+      }
+    }),
+  )
 
   const rawOcrEl = app.querySelector('#raw-ocr-text')
   rawOcrEl?.addEventListener('input', () => {
@@ -1440,28 +1588,31 @@ function bindImport() {
     render()
   })
 
-  app.querySelector('#parse-ocr')?.addEventListener('click', () => {
-    const text = (app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr)
-      .replace(/^【[^】]+】\s*$/gm, '')
-      .trim()
-    state.rawOcr = app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr
-    if (!text) {
-      alert('原文为空，请先识别或粘贴文本')
-      return
-    }
-    const parsed = parseOcrText(text)
-    if (!parsed.length) {
-      alert('没解析出书名，请再改改原文后重试')
-      return
-    }
-    state.importDrafts = parsed.map((p) => ({
-      title: p.title,
-      author: p.author || '',
-      synopsis: '',
-      tags: ['未读'],
-    }))
-    render()
-  })
+  app.querySelector('#parse-ocr')?.addEventListener(
+    'click',
+    withClickGuard(() => {
+      const text = (app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr)
+        .replace(/^【[^】]+】\s*$/gm, '')
+        .trim()
+      state.rawOcr = app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr
+      if (!text) {
+        alert('原文为空，请先识别或粘贴文本')
+        return
+      }
+      const parsed = parseOcrText(text)
+      if (!parsed.length) {
+        alert('没解析出书名，请再改改原文后重试')
+        return
+      }
+      state.importDrafts = parsed.map((p) => ({
+        title: p.title,
+        author: p.author || '',
+        synopsis: '',
+        tags: ['未读'],
+      }))
+      render()
+    }),
+  )
 
   ;['title', 'author', 'synopsis', 'tags'].forEach((key) => {
     app.querySelectorAll(`[data-d-${key}]`).forEach((el) => {
@@ -1498,41 +1649,50 @@ function bindImport() {
   }
 
   app.querySelectorAll('[data-save-draft]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener(
+      'click',
+      withClickGuard(async () => {
+        try {
+          const i = Number(btn.dataset.saveDraft)
+          await runBusy('入库中…', async () => {
+            await saveOne(i)
+            state.importDrafts.splice(i, 1)
+          })
+          alert('已入库')
+          render()
+        } catch (err) {
+          alert(err.message)
+        }
+      }),
+    )
+  })
+
+  app.querySelector('#save-all-drafts')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
       try {
-        const i = Number(btn.dataset.saveDraft)
-        await saveOne(i)
-        state.importDrafts.splice(i, 1)
-        alert('已入库')
+        let failed = 0
+        await runBusy('全部入库…', async () => {
+          const remaining = []
+          for (let i = 0; i < state.importDrafts.length; i++) {
+            try {
+              await saveOne(i)
+            } catch {
+              remaining.push(state.importDrafts[i])
+            }
+          }
+          failed = remaining.length
+          state.importDrafts = remaining
+          if (!failed) state.page = 'library'
+        })
+        if (failed) alert(`有 ${failed} 条未入库（多半缺书名），请补全后重试`)
+        else alert('已全部入库')
         render()
       } catch (err) {
         alert(err.message)
       }
-    })
-  })
-
-  app.querySelector('#save-all-drafts')?.addEventListener('click', async () => {
-    try {
-      const remaining = []
-      for (let i = 0; i < state.importDrafts.length; i++) {
-        try {
-          await saveOne(i)
-        } catch {
-          remaining.push(state.importDrafts[i])
-        }
-      }
-      const failed = remaining.length
-      state.importDrafts = remaining
-      if (failed) alert(`有 ${failed} 条未入库（多半缺书名），请补全后重试`)
-      else {
-        alert('已全部入库')
-        state.page = 'library'
-      }
-      render()
-    } catch (err) {
-      alert(err.message)
-    }
-  })
+    }),
+  )
 }
 
 let bootingStore = false

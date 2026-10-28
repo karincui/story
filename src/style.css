@@ -36,6 +36,60 @@ body {
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  touch-action: manipulation;
+  -ms-touch-action: manipulation;
+  overscroll-behavior-y: contain;
+}
+
+/* 避免 iOS 聚焦输入框时自动放大页面 */
+input,
+textarea,
+select,
+button {
+  font-size: 16px;
+  touch-action: manipulation;
+}
+
+.busy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(27, 42, 74, 0.28);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  touch-action: none;
+  user-select: none;
+}
+
+.busy-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  color: var(--ink, #1b2a4a);
+  box-shadow: 0 12px 40px rgba(27, 42, 74, 0.18);
+  font-size: 0.95rem;
+  max-width: min(80vw, 280px);
+}
+
+.busy-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--teal, #3d7a7a) 25%, transparent);
+  border-top-color: var(--teal, #3d7a7a);
+  border-radius: 50%;
+  animation: busy-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 body {
