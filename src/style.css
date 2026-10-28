@@ -1178,8 +1178,12 @@ button {
   height: 22px;
   border-radius: 50%;
   border: 3px solid #fff;
-  background: var(--teal, #3d7a7a);
-  box-shadow: 0 2px 8px rgba(42, 36, 28, 0.28);
+  background: var(--reader-thumb);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+}
+
+.reader-shell.theme-night .error-text {
+  color: #ffb4b4;
 }
 
 .swipe-hint {
