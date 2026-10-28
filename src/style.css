@@ -716,11 +716,7 @@ button {
   }
 
   .swipe-actions {
-    width: 96px;
-  }
-
-  .swipe-btn {
-    font-size: 0.72rem;
+    width: 80px;
   }
 
   .sort-controls .btn.sm {

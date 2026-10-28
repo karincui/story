@@ -545,8 +545,12 @@ function renderCard(n, index = 0, total = 0) {
   return `
     <div class="swipe-item ${state.sortMode ? 'sort-mode' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(index, 8) * 40}ms">
       <div class="swipe-actions">
-        <button type="button" class="swipe-btn edit" data-edit="${n.id}">编辑</button>
-        <button type="button" class="swipe-btn delete" data-del="${n.id}">删除</button>
+        <button type="button" class="swipe-btn edit" data-edit="${n.id}" title="编辑" aria-label="编辑">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1 1 0 0 0 0-1.41l-2.51-2.51a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 2z"/></svg>
+        </button>
+        <button type="button" class="swipe-btn delete" data-del="${n.id}" title="删除" aria-label="删除">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
       </div>
       <div class="swipe-content">
         <div class="card-main">
