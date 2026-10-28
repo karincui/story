@@ -751,79 +751,74 @@ button {
   font-weight: 600;
 }
 
-.card-title-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  justify-content: space-between;
-}
-
-.card-title-row h3 {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.read-badge {
-  flex: 0 0 auto;
-  margin-top: 2px;
-  border: 1px solid transparent;
-  border-radius: 999px;
+.read-chip {
+  appearance: none;
   font: inherit;
   font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  padding: 3px 8px;
-  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   line-height: 1.2;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
 }
 
-.read-badge.unread {
-  color: #8a3b12;
-  background: #ffe2c8;
-  border-color: #f0b27a;
-  box-shadow: 0 0 0 1px rgba(240, 140, 60, 0.15);
+.read-chip.unread {
+  color: #9a4b1a;
+  background: #fff1e4;
+  border-color: color-mix(in srgb, #e08a45 35%, transparent);
 }
 
-.read-badge.read {
-  color: #4b5563;
-  background: #e8ecef;
-  border-color: #c9d1d8;
+.read-chip.read {
+  color: #5a6b63;
+  background: #e8f0ec;
+  border-color: color-mix(in srgb, #6a8578 28%, transparent);
+}
+
+.swipe-item.open .read-chip {
+  visibility: hidden;
 }
 
 .swipe-item.is-unread .swipe-content {
-  background: linear-gradient(180deg, #ffffff 0%, #f7fbfa 100%);
-  border-color: color-mix(in srgb, var(--teal) 28%, var(--line-soft));
+  background: linear-gradient(180deg, #ffffff 0%, #fbfaf7 100%);
+  border-color: color-mix(in srgb, #e08a45 22%, var(--line-soft));
 }
 
 .swipe-item.is-unread .swipe-content::before {
   width: 3px;
-  background: #e07a2f;
-  opacity: 1;
+  background: #e08a45;
+  opacity: 0.95;
 }
 
 .swipe-item.is-unread .swipe-content h3 {
-  font-weight: 800;
+  font-weight: 750;
   color: var(--ink, #1a1f24);
 }
 
 .swipe-item.is-read .swipe-content {
-  background: linear-gradient(180deg, #f4f5f6 0%, #eceef0 100%);
-  border-color: #d7d9de;
-  opacity: 0.88;
+  background: linear-gradient(180deg, #fafbfb 0%, #f3f6f5 100%);
+  border-color: color-mix(in srgb, var(--teal) 12%, var(--line-soft));
 }
 
 .swipe-item.is-read .swipe-content::before {
-  background: #9aa3ad;
-  opacity: 0.55;
+  width: 2px;
+  background: #8aa399;
+  opacity: 0.7;
 }
 
 .swipe-item.is-read .swipe-content h3 {
   font-weight: 600;
-  color: #6b7280;
+  color: #5c676f;
 }
 
 .swipe-item.is-read .by-author {
-  color: #8b949e;
+  color: #8a9499;
+}
+
+.swipe-item.is-read .card-tags span {
+  opacity: 0.85;
 }
 
 .swipe-item {

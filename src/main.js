@@ -598,17 +598,15 @@ function renderCard(n, index = 0, total = 0) {
       </div>
       <div class="swipe-content">
         <div class="card-main">
-          <div class="card-title-row">
-            <h3>${escapeHtml(n.title)}${byline}</h3>
+          <h3>${escapeHtml(n.title)}${byline}</h3>
+          <div class="card-tags">
             <button
               type="button"
-              class="read-badge ${isRead ? 'read' : 'unread'}"
+              class="read-chip ${isRead ? 'read' : 'unread'}"
               data-toggle-read="${n.id}"
               title="${isRead ? '点一下标为未读' : '点一下标为已读'}"
               aria-pressed="${isRead ? 'true' : 'false'}"
-            >${isRead ? '已读' : '未读'}</button>
-          </div>
-          <div class="card-tags">
+            >${isRead ? '✓ 已读' : '未读'}</button>
             ${statusTags.map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
             ${attach}
           </div>
