@@ -309,20 +309,32 @@ function render() {
           <button class="nav-btn ${state.page === 'library' ? 'active' : ''}" data-nav="library">小说库</button>
           <button class="nav-btn ${state.page === 'import' ? 'active' : ''}" data-nav="import">截图导入</button>
           <button class="nav-btn ${state.page === 'gallery' ? 'active' : ''}" data-nav="gallery">图库</button>
-          <button class="nav-btn ${state.page === 'excel' ? 'active' : ''}" data-nav="excel">Excel导入</button>
-          <button class="nav-btn" id="add-novel" type="button">手动添加</button>
+          <button class="nav-btn ${state.page === 'excel' ? 'active' : ''}" data-nav="excel">Excel</button>
         </nav>
         <div class="top-actions">
-          ${
-            state.page === 'library'
-              ? `<button class="btn ghost" id="export-md">导出 MD</button>
-          <button class="btn ghost" id="import-md" type="button">导入 MD</button>
-          <input type="file" id="import-md-input" accept=".md,text/markdown,text/plain" hidden />`
-              : ''
-          }
-          <button class="btn" id="add-novel-primary">+ 添加小说</button>
-          <span class="user-chip" title="${escapeHtml(state.user.email || '已登录')}" aria-label="${escapeHtml(state.user.email || '已登录')}">${USER_ICON_SVG}</span>
-          <button class="btn ghost" id="sign-out" type="button" title="${escapeHtml(state.user.email || '')}">退出</button>
+          <button class="btn" id="add-novel-primary" type="button">+ 添加</button>
+          <div class="account-menu">
+            <button
+              type="button"
+              class="account-menu-btn"
+              id="account-menu-btn"
+              title="${escapeHtml(state.user.email || '账号')}"
+              aria-label="账号菜单"
+              aria-expanded="false"
+              aria-haspopup="true"
+            >${USER_ICON_SVG}</button>
+            <div class="account-dropdown" id="account-dropdown" hidden>
+              <p class="account-email">${escapeHtml(state.user.email || '已登录')}</p>
+              ${
+                state.page === 'library'
+                  ? `<button type="button" class="account-item" id="export-md">导出 MD</button>
+              <button type="button" class="account-item" id="import-md">导入 MD</button>
+              <input type="file" id="import-md-input" accept=".md,text/markdown,text/plain" hidden />`
+                  : ''
+              }
+              <button type="button" class="account-item danger" id="sign-out">退出登录</button>
+            </div>
+          </div>
         </div>
         ${
           state.page === 'library'
@@ -1646,9 +1658,33 @@ function bindEvents() {
     state.pendingAttachmentClear = false
     render()
   })
-  app.querySelector('#add-novel')?.addEventListener('click', openAddNovel)
   app.querySelector('#add-novel-primary')?.addEventListener('click', openAddNovel)
   app.querySelector('#add-novel-empty')?.addEventListener('click', openAddNovel)
+
+  const accountBtn = app.querySelector('#account-menu-btn')
+  const accountDrop = app.querySelector('#account-dropdown')
+  accountBtn?.addEventListener('click', (e) => {
+    e.stopPropagation()
+    const open = accountDrop?.hasAttribute('hidden')
+    if (!accountDrop) return
+    if (open) {
+      accountDrop.removeAttribute('hidden')
+      accountBtn.setAttribute('aria-expanded', 'true')
+    } else {
+      accountDrop.setAttribute('hidden', '')
+      accountBtn.setAttribute('aria-expanded', 'false')
+    }
+  })
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (!accountDrop || accountDrop.hasAttribute('hidden')) return
+      if (e.target?.closest?.('.account-menu')) return
+      accountDrop.setAttribute('hidden', '')
+      accountBtn?.setAttribute('aria-expanded', 'false')
+    },
+    { once: true },
+  )
 
   app.querySelector('#sign-out')?.addEventListener(
     'click',
