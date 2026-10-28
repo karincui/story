@@ -74,6 +74,8 @@ const state = {
   readerPage: 1,
   readerTotalPages: 1,
   readerPercent: 0,
+  /** parchment | eye-care | night */
+  readerTheme: localStorage.getItem('novel-reader-theme') || 'parchment',
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -895,13 +897,37 @@ function seekReaderByPercent(percent) {
   if (pctLabel) pctLabel.textContent = `${Math.round(pct)}%`
 }
 
+function setReaderTheme(theme) {
+  const next = ['parchment', 'eye-care', 'night'].includes(theme) ? theme : 'parchment'
+  state.readerTheme = next
+  try {
+    localStorage.setItem('novel-reader-theme', next)
+  } catch {
+    /* ignore */
+  }
+  const shell = app.querySelector('#txt-reader')
+  if (shell) {
+    shell.classList.remove('theme-parchment', 'theme-eye-care', 'theme-night')
+    shell.classList.add(`theme-${next}`)
+  }
+  app.querySelectorAll('[data-reader-theme]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.readerTheme === next)
+  })
+}
+
 function renderTxtReader() {
   const size = state.readerFontSize || 18
   const enc = state.readerEncoding || 'auto'
+  const theme = state.readerTheme || 'parchment'
   const encBtn = (id, label) =>
     `<button type="button" class="btn ghost sm reader-enc ${enc === id ? 'active' : ''}" data-reader-enc="${id}">${label}</button>`
+  const themeBtn = (id, label, swatch) =>
+    `<button type="button" class="reader-theme-btn ${theme === id ? 'active' : ''}" data-reader-theme="${id}" title="${label}" aria-label="${label}">
+      <span class="reader-theme-swatch" style="--swatch:${swatch}"></span>
+      <span>${label}</span>
+    </button>`
   return `
-    <div class="reader-shell" id="txt-reader" role="dialog" aria-modal="true" aria-label="TXT 阅读器">
+    <div class="reader-shell theme-${theme}" id="txt-reader" role="dialog" aria-modal="true" aria-label="TXT 阅读器">
       <header class="reader-bar">
         <button type="button" class="btn ghost sm" id="reader-close">关闭</button>
         <h2 class="reader-title">${escapeHtml(state.readerTitle || '阅读')}</h2>
@@ -910,12 +936,24 @@ function renderTxtReader() {
           <button type="button" class="btn ghost sm" id="reader-font-up" title="放大字号">A+</button>
         </div>
       </header>
-      <div class="reader-enc-bar">
-        <span class="muted">编码</span>
-        ${encBtn('auto', '自动')}
-        ${encBtn('gbk', 'GBK')}
-        ${encBtn('utf-8', 'UTF-8')}
-        ${encBtn('utf-16le', 'UTF-16')}
+      <div class="reader-settings-bar">
+        <div class="reader-setting-row">
+          <span class="reader-setting-label">背景</span>
+          <div class="reader-theme-list">
+            ${themeBtn('parchment', '米白', '#f7f3ea')}
+            ${themeBtn('eye-care', '护眼绿', '#c7e0c4')}
+            ${themeBtn('night', '深夜', '#2b2f33')}
+          </div>
+        </div>
+        <div class="reader-setting-row">
+          <span class="reader-setting-label">编码</span>
+          <div class="reader-enc-list">
+            ${encBtn('auto', '自动')}
+            ${encBtn('gbk', 'GBK')}
+            ${encBtn('utf-8', 'UTF-8')}
+            ${encBtn('utf-16le', 'UTF-16')}
+          </div>
+        </div>
       </div>
       <div class="reader-body" id="reader-body" style="font-size:${size}px">
         ${
@@ -1018,6 +1056,12 @@ function bindTxtReader() {
     if (body) body.style.fontSize = `${state.readerFontSize}px`
     refreshPages()
   })
+  app.querySelectorAll('[data-reader-theme]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      setReaderTheme(btn.dataset.readerTheme)
+    })
+  })
+
   app.querySelectorAll('[data-reader-enc]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       try {
