@@ -753,7 +753,7 @@ button {
   position: absolute;
   inset: 0 0 0 auto;
   display: flex;
-  width: 128px;
+  width: 88px;
   z-index: 0;
 }
 
@@ -762,10 +762,15 @@ button {
   border: none;
   cursor: pointer;
   color: #fff;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
   padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swipe-btn svg {
+  display: block;
+  pointer-events: none;
 }
 
 .swipe-btn.edit {

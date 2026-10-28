@@ -1386,7 +1386,7 @@ function bindExcel() {
 }
 
 function swipeOpenX() {
-  return window.matchMedia('(max-width: 560px)').matches ? -96 : -128
+  return window.matchMedia('(max-width: 560px)').matches ? -80 : -88
 }
 
 function closeAllSwipes(except = null) {
