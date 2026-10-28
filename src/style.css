@@ -565,6 +565,60 @@ button {
   margin: 0;
 }
 
+.tags-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+
+.tags-toggle h2 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.tags-toggle-caret {
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  line-height: 1;
+}
+
+.tags-collapsed-chip {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--line-soft);
+  background: color-mix(in srgb, var(--surface) 88%, #fff);
+  color: var(--ink-muted);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  padding: 7px 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tags-collapsed-chip:hover {
+  border-color: color-mix(in srgb, var(--teal) 35%, var(--line));
+  color: var(--ink);
+}
+
+.sidebar.tags-collapsed .sidebar-head {
+  margin-bottom: 6px;
+}
+
 .tag-manage-hint {
   margin: 0 0 8px;
   font-size: 0.75rem;

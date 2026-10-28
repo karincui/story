@@ -44,6 +44,8 @@ const state = {
   /** all | unread | read */
   readFilter: 'all',
   tagManage: false,
+  /** 标签筛选面板是否展开 */
+  tagsPanelOpen: localStorage.getItem('novel-tags-panel-open') === '1',
   sortMode: false,
   editingId: null,
   importFiles: [],
@@ -516,18 +518,31 @@ function renderLibrary() {
   const from = meta.total === 0 ? 0 : (meta.page - 1) * meta.pageSize + 1
   const to = Math.min(meta.page * meta.pageSize, meta.total)
 
+  const tagsOpen = Boolean(state.tagsPanelOpen || state.tagManage)
+  const tagsSummary = state.filterTags.length
+    ? `已选 ${state.filterTags.length} 个：${state.filterTags.slice(0, 3).join('、')}${state.filterTags.length > 3 ? '…' : ''}`
+    : '标签筛选'
   return `
     <div class="layout">
-      <aside class="sidebar">
+      <aside class="sidebar ${tagsOpen ? 'tags-open' : 'tags-collapsed'}">
         <div class="sidebar-head">
-          <h2>${state.tagManage ? '管理标签' : '标签筛选'}</h2>
-          <button type="button" class="btn ghost sm" id="toggle-tag-manage">${state.tagManage ? '完成' : '管理'}</button>
+          <button type="button" class="tags-toggle" id="toggle-tags-panel" aria-expanded="${tagsOpen ? 'true' : 'false'}">
+            <h2>${state.tagManage ? '管理标签' : '标签筛选'}</h2>
+            <span class="tags-toggle-caret" aria-hidden="true">${tagsOpen ? '▴' : '▾'}</span>
+          </button>
+          ${
+            tagsOpen
+              ? `<button type="button" class="btn ghost sm" id="toggle-tag-manage">${state.tagManage ? '完成' : '管理'}</button>`
+              : ''
+          }
         </div>
         ${
-          state.tagManage
-            ? `<p class="muted tag-manage-hint">点 × 删除标签；会从所有小说上移除该标签</p>`
-            : ''
-        }
+          tagsOpen
+            ? `${
+                state.tagManage
+                  ? `<p class="muted tag-manage-hint">点 × 删除标签；会从所有小说上移除该标签</p>`
+                  : ''
+              }
         <div class="tag-list ${state.tagManage ? 'managing' : ''}">
           ${tags
             .map((t) =>
@@ -552,6 +567,8 @@ function renderLibrary() {
                 <button class="btn ghost sm" id="clear-filters">清除筛选</button>
               </div>`
             : ''
+        }`
+            : `<button type="button" class="tags-collapsed-chip" id="toggle-tags-panel-chip">${escapeHtml(tagsSummary)}</button>`
         }
       </aside>
       <section class="main-panel">
@@ -1613,8 +1630,30 @@ function bindEvents() {
     search.addEventListener('input', onSearch)
   }
 
+  const setTagsPanelOpen = (open) => {
+    state.tagsPanelOpen = Boolean(open)
+    try {
+      localStorage.setItem('novel-tags-panel-open', state.tagsPanelOpen ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }
+  app.querySelector('#toggle-tags-panel')?.addEventListener('click', () => {
+    if (state.tagManage) {
+      state.tagManage = false
+      setTagsPanelOpen(false)
+    } else {
+      setTagsPanelOpen(!state.tagsPanelOpen)
+    }
+    render()
+  })
+  app.querySelector('#toggle-tags-panel-chip')?.addEventListener('click', () => {
+    setTagsPanelOpen(true)
+    render()
+  })
   app.querySelector('#toggle-tag-manage')?.addEventListener('click', () => {
     state.tagManage = !state.tagManage
+    if (state.tagManage) setTagsPanelOpen(true)
     render()
   })
 
