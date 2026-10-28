@@ -1385,8 +1385,15 @@ function bindExcel() {
   )
 }
 
-function swipeOpenX() {
-  return window.matchMedia('(max-width: 560px)').matches ? -80 : -88
+/** 左滑距离必须等于操作区实际宽度，否则编辑按钮会被挡住 */
+function swipeOpenX(itemEl) {
+  const actions = itemEl?.querySelector?.('.swipe-actions')
+  const w = actions?.getBoundingClientRect?.().width
+  if (w && w > 0) return -Math.round(w)
+  const cssW = itemEl
+    ? parseFloat(getComputedStyle(itemEl).getPropertyValue('--swipe-actions-w'))
+    : NaN
+  return -(Number.isFinite(cssW) && cssW > 0 ? Math.round(cssW) : 96)
 }
 
 function closeAllSwipes(except = null) {
@@ -1411,7 +1418,7 @@ function bindSwipe() {
     let locked = null // 'h' | 'v'
     let moved = false
 
-    const getOpenX = () => (item.classList.contains('open') ? swipeOpenX() : 0)
+    const getOpenX = () => (item.classList.contains('open') ? swipeOpenX(item) : 0)
     const isInteractive = (target) =>
       Boolean(target?.closest?.('button, a, input, textarea, label, .attach-chip'))
 
