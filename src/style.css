@@ -1244,16 +1244,6 @@ button {
   color: var(--reader-fg);
 }
 
-.reader-progress-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.reader-progress-meta .btn.ghost.sm {
-  margin-left: auto;
-}
-
 .reader-progress-chip {
   display: flex;
   align-items: center;
@@ -1363,12 +1353,18 @@ button {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   margin-bottom: 8px;
   font-size: 0.8rem;
   color: var(--reader-muted);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.reader-progress-meta .btn.ghost.sm {
+  margin-left: auto;
+  font-weight: 500;
 }
 
 .reader-slider-wrap {
