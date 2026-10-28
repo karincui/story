@@ -787,13 +787,15 @@ function renderImport() {
               </div>
               <div class="draft-bulk-actions">
                 <button class="btn" id="save-all-drafts">全部入库</button>
+                <button class="btn ghost" id="add-manual-draft-side" type="button">增加条目</button>
                 <button class="btn ghost" id="clear-drafts-side" type="button">清空条目</button>
               </div>`
             : `<p class="muted">${
                 rawOcr !== ''
-                  ? '左侧核验完原文后，点「生成条目」会出现在这里。'
-                  : '先上传截图并识别，核对原文后再生成条目。'
-              }</p>`
+                  ? '左侧核验完原文后，点「生成条目」会出现在这里；也可点「增加条目」手填。'
+                  : '可先识别截图，或直接点下方手动加一本。'
+              }</p>
+              <button class="btn ghost" id="add-manual-draft-empty" type="button" style="margin-top:10px">+ 增加条目</button>`
         }
       </section>
     </div>
@@ -2631,6 +2633,21 @@ function bindImport() {
     state.rawOcr = ''
     render()
   })
+
+  const addManualDraft = () => {
+    state.importDrafts = [
+      ...state.importDrafts,
+      { title: '', author: '', synopsis: '', tags: ['未读'] },
+    ]
+    render()
+    queueMicrotask(() => {
+      const i = state.importDrafts.length - 1
+      app.querySelector(`[data-d-title="${i}"]`)?.focus()
+    })
+  }
+  app.querySelector('#add-manual-draft')?.addEventListener('click', addManualDraft)
+  app.querySelector('#add-manual-draft-side')?.addEventListener('click', addManualDraft)
+  app.querySelector('#add-manual-draft-empty')?.addEventListener('click', addManualDraft)
 
   const clearDraftEntries = withClickGuard(async () => {
     const draftCount = state.importDrafts.length
