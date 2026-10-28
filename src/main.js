@@ -95,6 +95,8 @@ const state = {
   readerCustomBg: localStorage.getItem('novel-reader-custom-bg') || '#f7f3ea',
   readerCustomFg: localStorage.getItem('novel-reader-custom-fg') || '#2a241c',
   readerCustomBgImage: localStorage.getItem('novel-reader-custom-bg-image') || '',
+  /** 阅读器「背景/编码」面板是否展开 */
+  readerSettingsOpen: false,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -1170,6 +1172,11 @@ function renderTxtReader() {
   const bg = state.readerCustomBg || '#f7f3ea'
   const fg = state.readerCustomFg || '#2a241c'
   const hasImg = Boolean(state.readerCustomBgImage)
+  const settingsOpen = Boolean(state.readerSettingsOpen)
+  const themeLabel =
+    theme === 'eye-care' ? '护眼绿' : theme === 'night' ? '深夜' : theme === 'custom' ? '自定义' : '米白'
+  const encLabel =
+    enc === 'gbk' ? 'GBK' : enc === 'utf-8' ? 'UTF-8' : enc === 'utf-16le' || enc === 'utf-16be' ? 'UTF-16' : '自动'
   const encBtn = (id, label) =>
     `<button type="button" class="btn ghost sm reader-enc ${enc === id ? 'active' : ''}" data-reader-enc="${id}">${label}</button>`
   const themeBtn = (id, label, swatch) =>
@@ -1185,9 +1192,10 @@ function renderTxtReader() {
         <div class="reader-tools">
           <button type="button" class="btn ghost sm" id="reader-font-down" title="缩小字号">A-</button>
           <button type="button" class="btn ghost sm" id="reader-font-up" title="放大字号">A+</button>
+          <button type="button" class="btn ghost sm ${settingsOpen ? 'active-settings' : ''}" id="reader-settings-toggle" aria-expanded="${settingsOpen ? 'true' : 'false'}" title="背景与编码">设置</button>
         </div>
       </header>
-      <div class="reader-settings-bar">
+      <div class="reader-settings-bar" id="reader-settings-bar" ${settingsOpen ? '' : 'hidden'}>
         <div class="reader-setting-row">
           <span class="reader-setting-label">背景</span>
           <div class="reader-theme-list">
@@ -1224,6 +1232,11 @@ function renderTxtReader() {
           </div>
         </div>
       </div>
+      ${
+        settingsOpen
+          ? ''
+          : `<button type="button" class="reader-settings-chip" id="reader-settings-chip" title="展开背景与编码设置">${escapeHtml(themeLabel)} · ${escapeHtml(encLabel)} ▾</button>`
+      }
       <div class="reader-body" id="reader-body" style="font-size:${size}px">
         ${
           state.readerError
@@ -1324,6 +1337,12 @@ function bindTxtReader() {
     if (body) body.style.fontSize = `${state.readerFontSize}px`
     refreshPages()
   })
+  const toggleReaderSettings = () => {
+    state.readerSettingsOpen = !state.readerSettingsOpen
+    render()
+  }
+  app.querySelector('#reader-settings-toggle')?.addEventListener('click', toggleReaderSettings)
+  app.querySelector('#reader-settings-chip')?.addEventListener('click', toggleReaderSettings)
   app.querySelectorAll('[data-reader-theme]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setReaderTheme(btn.dataset.readerTheme)

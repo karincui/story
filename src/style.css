@@ -1216,6 +1216,34 @@ button {
   background: var(--reader-panel);
 }
 
+.reader-settings-bar[hidden] {
+  display: none !important;
+}
+
+.reader-shell .reader-tools .btn.ghost.active-settings {
+  border-color: var(--reader-accent);
+  color: var(--reader-accent);
+  background: color-mix(in srgb, var(--reader-accent) 14%, transparent);
+}
+
+.reader-settings-chip {
+  display: block;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--reader-line);
+  background: var(--reader-panel);
+  color: var(--reader-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  text-align: left;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.reader-settings-chip:hover {
+  color: var(--reader-fg);
+}
+
 .reader-setting-row {
   display: flex;
   align-items: center;
