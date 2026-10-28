@@ -533,6 +533,7 @@ function renderLibrary() {
           <h2>小说库</h2>
           <div class="toolbar-right">
             <span class="muted">共 ${novels.length} 本</span>
+            <button type="button" class="btn ghost sm" id="refresh-library" title="从云端重新拉取书单">刷新</button>
             ${
               novels.length || state.readFilter !== 'all'
                 ? `<button type="button" class="btn ghost sm ${state.sortMode ? 'active-sort' : ''}" id="toggle-sort-mode">
