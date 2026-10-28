@@ -11,6 +11,9 @@ import {
   setNovelRead,
   moveNovelInView,
   refreshStore,
+  loadNovelsPage,
+  getPageMeta,
+  PAGE_SIZE,
   getAttachmentSignedUrl,
   fetchAttachmentText,
   fetchAttachmentBuffer,
@@ -467,7 +470,12 @@ async function bootStore() {
   render()
   try {
     const mig = await migrateLocalIfNeeded()
-    await refreshStore()
+    await refreshStore({
+      page: 1,
+      query: state.query,
+      tags: state.filterTags,
+      readFilter: state.readFilter,
+    })
     state.storeReady = true
     if (mig.migrated && mig.count) {
       queueMicrotask(() => alert(`已将本地 ${mig.count} 本书同步到云端`))
@@ -480,15 +488,28 @@ async function bootStore() {
   render()
 }
 
+/** 按当前筛选重新拉取某一页 */
+async function reloadLibrary(page = 1) {
+  await loadNovelsPage({
+    page,
+    query: state.query,
+    tags: state.filterTags,
+    readFilter: state.readFilter,
+  })
+}
+
 function renderLibrary() {
   const novels = searchNovels({
     query: state.query,
     tags: state.filterTags,
     readFilter: state.readFilter,
   })
+  const meta = getPageMeta()
   const tags = getAllTags()
   const readTab = (id, label) =>
     `<button type="button" class="read-filter-btn ${state.readFilter === id ? 'active' : ''}" data-read-filter="${id}">${label}</button>`
+  const from = meta.total === 0 ? 0 : (meta.page - 1) * meta.pageSize + 1
+  const to = Math.min(meta.page * meta.pageSize, meta.total)
 
   return `
     <div class="layout">
@@ -532,10 +553,10 @@ function renderLibrary() {
         <div class="toolbar">
           <h2>小说库</h2>
           <div class="toolbar-right">
-            <span class="muted">共 ${novels.length} 本</span>
+            <span class="muted">共 ${meta.total} 本 · 每页 ${PAGE_SIZE}</span>
             <button type="button" class="btn ghost sm" id="refresh-library" title="从云端重新拉取书单">刷新</button>
             ${
-              novels.length || state.readFilter !== 'all'
+              novels.length || state.readFilter !== 'all' || meta.total > 0
                 ? `<button type="button" class="btn ghost sm ${state.sortMode ? 'active-sort' : ''}" id="toggle-sort-mode">
                     ${state.sortMode ? '完成排序' : '排序'}
                   </button>`
@@ -557,6 +578,11 @@ function renderLibrary() {
           novels.length
             ? `<div class="novel-list ${state.sortMode ? 'sorting' : ''}">
                 ${novels.map((n, i) => renderCard(n, i, novels.length)).join('')}
+              </div>
+              <div class="pager" aria-label="分页">
+                <button type="button" class="btn ghost sm" id="page-prev" ${meta.page <= 1 ? 'disabled' : ''}>上一页</button>
+                <span class="pager-info">${from}-${to} / ${meta.total} · 第 ${meta.page}/${meta.totalPages} 页</span>
+                <button type="button" class="btn ghost sm" id="page-next" ${meta.page >= meta.totalPages ? 'disabled' : ''}>下一页</button>
               </div>`
             : `<div class="empty">
                 <h3 class="empty-title">${
@@ -564,16 +590,18 @@ function renderLibrary() {
                     ? '没有未读书'
                     : state.readFilter === 'read'
                       ? '还没有已读书'
-                      : '书架还是空的'
+                      : state.query || state.filterTags.length
+                        ? '没有匹配的书'
+                        : '书架还是空的'
                 }</h3>
                 <p>${
-                  state.readFilter === 'all'
+                  state.readFilter === 'all' && !state.query && !state.filterTags.length
                     ? '手动添加一本，或从截图里识别书名。'
                     : '换个筛选看看，或点卡片上的「未读/已读」切换状态。'
                 }</p>
                 <div class="empty-actions">
                   ${
-                    state.readFilter !== 'all'
+                    state.readFilter !== 'all' || state.query || state.filterTags.length
                       ? `<button class="btn ghost" id="clear-read-filter">看全部</button>`
                       : `<button class="btn" id="add-novel-empty">+ 手动添加一本</button>
                   <button class="btn ghost" data-nav="import">从截图导入</button>`
@@ -1519,13 +1547,17 @@ function bindEvents() {
     const onSearch = debounce(() => {
       state.query = search.value
       const sel = search.selectionStart
-      render()
-      const again = app.querySelector('#search')
-      if (again) {
-        again.focus()
-        again.setSelectionRange(sel, sel)
-      }
-    }, 220)
+      runBusy('搜索…', () => reloadLibrary(1))
+        .then(() => {
+          render()
+          const again = app.querySelector('#search')
+          if (again) {
+            again.focus()
+            again.setSelectionRange(sel, sel)
+          }
+        })
+        .catch((err) => alert(err.message || String(err)))
+    }, 320)
     search.addEventListener('input', onSearch)
   }
 
@@ -1543,8 +1575,45 @@ function bindEvents() {
     'click',
     withClickGuard(async () => {
       try {
-        await runBusy('刷新书单…', () => refreshStore())
+        const meta = getPageMeta()
+        await runBusy('刷新书单…', () =>
+          refreshStore({
+            page: meta.page || 1,
+            query: state.query,
+            tags: state.filterTags,
+            readFilter: state.readFilter,
+          }),
+        )
         render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
+
+  app.querySelector('#page-prev')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const meta = getPageMeta()
+      if (meta.page <= 1) return
+      try {
+        await runBusy('加载上一页…', () => reloadLibrary(meta.page - 1))
+        render()
+        window.scrollTo(0, 0)
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
+  app.querySelector('#page-next')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const meta = getPageMeta()
+      if (meta.page >= meta.totalPages) return
+      try {
+        await runBusy('加载下一页…', () => reloadLibrary(meta.page + 1))
+        render()
+        window.scrollTo(0, 0)
       } catch (err) {
         alert(err.message || String(err))
       }
@@ -1572,14 +1641,19 @@ function bindEvents() {
   app.querySelectorAll('[data-filter-tag]').forEach((btn) => {
     btn.addEventListener(
       'click',
-      withClickGuard(() => {
+      withClickGuard(async () => {
         const t = btn.dataset.filterTag
         if (state.filterTags.includes(t)) {
           state.filterTags = state.filterTags.filter((x) => x !== t)
         } else {
           state.filterTags = [...state.filterTags, t]
         }
-        render()
+        try {
+          await runBusy('筛选中…', () => reloadLibrary(1))
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
       }),
     )
   })
@@ -1590,7 +1664,12 @@ function bindEvents() {
       withClickGuard(async (e) => {
         e.stopPropagation()
         const t = btn.dataset.delTag
-        const used = countNovelsWithTag(t)
+        let used = 0
+        try {
+          used = await countNovelsWithTag(t)
+        } catch {
+          used = 0
+        }
         const msg =
           used > 0
             ? `确定删除标签「${t}」？\n将从 ${used} 本小说上移除该标签。`
@@ -1601,6 +1680,7 @@ function bindEvents() {
             await deleteTag(t)
             state.filterTags = state.filterTags.filter((x) => x !== t)
             state.batchTags = (state.batchTags || []).filter((x) => x !== t)
+            await reloadLibrary(1)
           })
           render()
         } catch (err) {
@@ -1610,21 +1690,47 @@ function bindEvents() {
     )
   })
 
-  app.querySelector('#clear-filters')?.addEventListener('click', () => {
-    state.filterTags = []
-    render()
-  })
+  app.querySelector('#clear-filters')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      state.filterTags = []
+      try {
+        await runBusy('清除筛选…', () => reloadLibrary(1))
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
 
   app.querySelectorAll('[data-read-filter]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.readFilter = btn.dataset.readFilter || 'all'
-      render()
-    })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async () => {
+        state.readFilter = btn.dataset.readFilter || 'all'
+        try {
+          await runBusy('筛选中…', () => reloadLibrary(1))
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
+      }),
+    )
   })
-  app.querySelector('#clear-read-filter')?.addEventListener('click', () => {
-    state.readFilter = 'all'
-    render()
-  })
+  app.querySelector('#clear-read-filter')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      state.readFilter = 'all'
+      state.query = ''
+      state.filterTags = []
+      try {
+        await runBusy('加载书单…', () => reloadLibrary(1))
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
 
   app.querySelectorAll('[data-toggle-read]').forEach((btn) => {
     const stop = (e) => e.stopPropagation()
@@ -1639,9 +1745,10 @@ function bindEvents() {
         const novel = getNovel(id)
         if (!novel) return
         try {
-          await runBusy(novel.isRead ? '标为未读…' : '标为已读…', () =>
-            setNovelRead(id, !novel.isRead),
-          )
+          await runBusy(novel.isRead ? '标为未读…' : '标为已读…', async () => {
+            await setNovelRead(id, !novel.isRead)
+            await reloadLibrary(getPageMeta().page)
+          })
           render()
         } catch (err) {
           alert(err.message || String(err))
@@ -1825,7 +1932,10 @@ function bindEvents() {
         e.stopPropagation()
         if (await askConfirm('确定删除这本小说？')) {
           try {
-            await runBusy('删除中…', () => deleteNovel(btn.dataset.del))
+            await runBusy('删除中…', async () => {
+              await deleteNovel(btn.dataset.del)
+              await reloadLibrary(getPageMeta().page)
+            })
             render()
           } catch (err) {
             alert(err.message || String(err))
@@ -2309,9 +2419,10 @@ function bindModal() {
         .map((b) => b.dataset.toggleTag)
         .filter(Boolean)
       try {
+        const isNew = state.editingId === 'new'
         await runBusy('保存中…', async () => {
           await upsertNovel({
-            id: state.editingId === 'new' ? undefined : state.editingId,
+            id: isNew ? undefined : state.editingId,
             title,
             author,
             synopsis,
@@ -2322,6 +2433,7 @@ function bindModal() {
           state.editingId = null
           state.pendingAttachmentFile = null
           state.pendingAttachmentClear = false
+          await reloadLibrary(isNew ? 1 : getPageMeta().page)
         })
         render()
       } catch (err) {

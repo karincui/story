@@ -188,21 +188,138 @@ async function savePrefs() {
   if (error) throw error
 }
 
-/** 从云端拉取书单与标签偏好（登录后调用） */
-export async function refreshStore() {
-  const userId = await requireUserId()
-  const [{ data, error }, _] = await Promise.all([
-    supabase
-      .from('novels')
-      .select('*')
-      .eq('user_id', userId)
-      .order('sort_order', { ascending: true }),
-    ensurePrefs(userId),
-  ])
+export const PAGE_SIZE = 20
+
+/** @type {{ page: number, pageSize: number, total: number, totalPages: number, query: string, tags: string[], readFilter: string }} */
+let pageMeta = {
+  page: 1,
+  pageSize: PAGE_SIZE,
+  total: 0,
+  totalPages: 1,
+  query: '',
+  tags: [],
+  readFilter: 'all',
+}
+
+/** 全部书的标签汇总（轻量字段，用于侧边栏） */
+let novelTagsCache = []
+
+export function getPageMeta() {
+  return { ...pageMeta }
+}
+
+async function refreshNovelTags(userId) {
+  const { data, error } = await supabase.from('novels').select('tags').eq('user_id', userId)
   if (error) throw error
-  novelsCache = (data || []).map(rowToNovel)
+  novelTagsCache = [
+    ...new Set((data || []).flatMap((r) => (Array.isArray(r.tags) ? r.tags : []))),
+  ]
+}
+
+/**
+ * 分页拉取小说列表（服务端筛选/排序）
+ * @param {{ page?: number, query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read' }} [opts]
+ */
+export async function loadNovelsPage(opts = {}) {
+  const userId = await requireUserId()
+  const query = opts.query ?? pageMeta.query ?? ''
+  const tags = opts.tags ?? pageMeta.tags ?? []
+  const readFilter = opts.readFilter ?? pageMeta.readFilter ?? 'all'
+  let page = Math.max(1, Number(opts.page) || pageMeta.page || 1)
+
+  let q = supabase
+    .from('novels')
+    .select('*', { count: 'exact' })
+    .eq('user_id', userId)
+
+  if (readFilter === 'read') q = q.eq('is_read', true)
+  else if (readFilter === 'unread') q = q.eq('is_read', false)
+
+  for (const t of tags) {
+    if (t) q = q.contains('tags', [t])
+  }
+
+  const qstr = String(query || '')
+    .trim()
+    .replace(/[%_,]/g, ' ')
+  if (qstr) {
+    q = q.or(`title.ilike.%${qstr}%,author.ilike.%${qstr}%,synopsis.ilike.%${qstr}%`)
+  }
+
+  if (getLibrarySortPref() === 'manual') {
+    q = q.order('sort_order', { ascending: true }).order('created_at', { ascending: false })
+  } else {
+    q = q.order('created_at', { ascending: false }).order('sort_order', { ascending: true })
+  }
+
+  // 先查总数，避免页码越界
+  const from = (page - 1) * PAGE_SIZE
+  const to = from + PAGE_SIZE - 1
+  const { data, error, count } = await q.range(from, to)
+  if (error) throw error
+
+  const total = count ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE) || 1)
+  if (page > totalPages) {
+    page = totalPages
+    if (total === 0) {
+      novelsCache = []
+    } else {
+      return loadNovelsPage({ page, query, tags, readFilter })
+    }
+  } else {
+    novelsCache = (data || []).map(rowToNovel)
+  }
+
   ensureSortOrdersLocal()
+  pageMeta = {
+    page,
+    pageSize: PAGE_SIZE,
+    total,
+    totalPages,
+    query,
+    tags: [...tags],
+    readFilter,
+  }
   return listNovels()
+}
+
+/** 从云端拉取偏好 + 第一页书单（登录后调用） */
+export async function refreshStore(opts = {}) {
+  const userId = await requireUserId()
+  await ensurePrefs(userId)
+  await refreshNovelTags(userId)
+  return loadNovelsPage({
+    page: opts.page || 1,
+    query: opts.query ?? '',
+    tags: opts.tags ?? [],
+    readFilter: opts.readFilter ?? 'all',
+  })
+}
+
+/** 备份用：拉取全部小说（分页拼齐） */
+export async function fetchAllNovels() {
+  const userId = await requireUserId()
+  const all = []
+  let page = 0
+  const size = 100
+  for (;;) {
+    const from = page * size
+    const to = from + size - 1
+    let q = supabase.from('novels').select('*').eq('user_id', userId)
+    if (getLibrarySortPref() === 'manual') {
+      q = q.order('sort_order', { ascending: true }).order('created_at', { ascending: false })
+    } else {
+      q = q.order('created_at', { ascending: false }).order('sort_order', { ascending: true })
+    }
+    const { data, error } = await q.range(from, to)
+    if (error) throw error
+    const batch = (data || []).map(rowToNovel)
+    all.push(...batch)
+    if (batch.length < size) break
+    page += 1
+  }
+  return all
 }
 
 const LIBRARY_SORT_PREF_KEY = 'novel-library-sort-pref'
@@ -236,7 +353,10 @@ function ensureSortOrdersLocal() {
 export function getAllTags() {
   const hidden = new Set(prefsCache.hiddenPresets)
   const presets = PRESET_TAGS.filter((t) => !hidden.has(t))
-  const fromNovels = novelsCache.flatMap((n) => n.tags || [])
+  const fromNovels = [
+    ...novelTagsCache,
+    ...novelsCache.flatMap((n) => n.tags || []),
+  ]
   return [...new Set([...presets, ...prefsCache.customTags, ...fromNovels])]
 }
 
@@ -262,28 +382,46 @@ export async function deleteTag(tag) {
   }
   await savePrefs()
 
-  let removedFromNovels = 0
   const userId = await requireUserId()
+  const { data: rows, error: listErr } = await supabase
+    .from('novels')
+    .select('id, tags')
+    .eq('user_id', userId)
+    .contains('tags', [t])
+  if (listErr) throw listErr
+
+  let removedFromNovels = 0
   const now = new Date().toISOString()
-  for (const n of novelsCache) {
-    if (!(n.tags || []).includes(t)) continue
+  for (const row of rows || []) {
+    const nextTags = (row.tags || []).filter((x) => x !== t)
     removedFromNovels += 1
-    n.tags = n.tags.filter((x) => x !== t)
-    n.updatedAt = Date.now()
     const { error } = await supabase
       .from('novels')
-      .update({ tags: n.tags, updated_at: now })
-      .eq('id', n.id)
+      .update({ tags: nextTags, updated_at: now })
+      .eq('id', row.id)
       .eq('user_id', userId)
     if (error) throw error
+    const cached = novelsCache.find((n) => n.id === row.id)
+    if (cached) {
+      cached.tags = nextTags
+      cached.updatedAt = Date.now()
+    }
   }
+  novelTagsCache = novelTagsCache.filter((x) => x !== t)
   return { removedFromNovels }
 }
 
-export function countNovelsWithTag(tag) {
+export async function countNovelsWithTag(tag) {
   const t = String(tag || '').trim()
   if (!t) return 0
-  return novelsCache.filter((n) => (n.tags || []).includes(t)).length
+  const userId = await requireUserId()
+  const { count, error } = await supabase
+    .from('novels')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .contains('tags', [t])
+  if (error) throw error
+  return count || 0
 }
 
 export function listNovels() {
@@ -331,10 +469,11 @@ export async function moveNovelInView(visibleIds, id, action) {
     nextFull[pos] = order[idx]
   })
 
+  const base = (Math.max(1, pageMeta.page) - 1) * PAGE_SIZE
   const byId = new Map(novelsCache.map((n) => [n.id, n]))
   nextFull.forEach((nid, idx) => {
     const n = byId.get(nid)
-    if (n) n.sortOrder = idx
+    if (n) n.sortOrder = base + idx
   })
 
   const userId = await requireUserId()
@@ -342,7 +481,7 @@ export async function moveNovelInView(visibleIds, id, action) {
     const n = byId.get(nid)
     return supabase
       .from('novels')
-      .update({ sort_order: idx })
+      .update({ sort_order: base + idx })
       .eq('id', nid)
       .eq('user_id', userId)
       .then(({ error }) => {
@@ -510,19 +649,30 @@ export async function deleteNovel(id) {
 /** 清空当前账号下全部小说（含附件），不可恢复 */
 export async function clearAllNovels() {
   const userId = await requireUserId()
-  const snapshot = [...novelsCache]
-  if (!snapshot.length) return 0
+  const { data: rows, error: listErr } = await supabase
+    .from('novels')
+    .select('id, attachment_path')
+    .eq('user_id', userId)
+  if (listErr) throw listErr
+  if (!rows?.length) {
+    novelsCache = []
+    pageMeta = { ...pageMeta, page: 1, total: 0, totalPages: 1 }
+    novelTagsCache = []
+    return 0
+  }
 
-  const paths = snapshot.map((n) => n.attachmentPath).filter(Boolean)
+  const paths = rows.map((n) => n.attachment_path).filter(Boolean)
   const { error } = await supabase.from('novels').delete().eq('user_id', userId)
   if (error) throw error
   novelsCache = []
+  pageMeta = { ...pageMeta, page: 1, total: 0, totalPages: 1 }
+  novelTagsCache = []
 
   if (paths.length) {
     const { error: rmErr } = await supabase.storage.from(ATTACH_BUCKET).remove(paths)
     if (rmErr) console.warn('清空附件时部分失败', rmErr.message || rmErr)
   }
-  return snapshot.length
+  return rows.length
 }
 
 /**

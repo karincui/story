@@ -1,11 +1,18 @@
-import { exportMarkdown, listNovels, searchNovels, upsertNovel, refreshStore } from './store.js'
+import {
+  exportMarkdown,
+  fetchAllNovels,
+  searchNovels,
+  upsertNovel,
+  refreshStore,
+} from './store.js'
 import { parseWishlistMarkdown } from './mdImport.js'
 
 const BEIFEN_NAME = 'beifen.md'
 const LOCAL_API = '/api/beifen'
 
-export function buildBackupMarkdown() {
-  return exportMarkdown(listNovels())
+export async function buildBackupMarkdown() {
+  const novels = await fetchAllNovels()
+  return { md: exportMarkdown(novels), count: novels.length }
 }
 
 async function tryWriteLocalBeifen(md) {
@@ -44,12 +51,12 @@ function downloadBeifen(md) {
 
 /** 备份当前书架：优先写入本地 beifen.md（开发服），并下载一份 */
 export async function backupNovelsToBeifen() {
-  const md = buildBackupMarkdown()
+  const { md, count } = await buildBackupMarkdown()
   if (!md.trim()) throw new Error('书架是空的，没什么可备份')
   const wroteLocal = await tryWriteLocalBeifen(md)
   downloadBeifen(md)
   return {
-    count: listNovels().length,
+    count,
     wroteLocal,
     fileName: BEIFEN_NAME,
   }
@@ -91,7 +98,7 @@ export async function applyRestoreNovels(toAdd, opts = {}) {
       failed.push(`${d.title}：${err.message || err}`)
     }
   }
-  await refreshStore()
+  await refreshStore({ page: 1 })
   return { ok, failed }
 }
 
