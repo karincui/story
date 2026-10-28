@@ -153,10 +153,12 @@ button {
 }
 
 .user-chip {
-  max-width: 160px;
+  max-width: 7.5em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.85rem;
+  color: var(--ink-muted);
   font-size: 0.78rem;
   color: var(--ink-muted);
   align-self: center;

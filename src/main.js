@@ -105,6 +105,13 @@ function escapeHtml(s) {
     .replaceAll('"', '&quot;')
 }
 
+/** 顶栏只显示 @ 前一段，过长再截断；完整邮箱放 title */
+function shortUserLabel(email) {
+  if (!email) return '已登录'
+  const local = String(email).split('@')[0] || email
+  return local.length > 10 ? `${local.slice(0, 10)}…` : local
+}
+
 /** 自绘对话框：部分内嵌浏览器会拦截原生 prompt/confirm */
 function askText(title, { placeholder = '', defaultValue = '' } = {}) {
   return new Promise((resolve) => {
@@ -219,8 +226,8 @@ function render() {
         <div class="top-actions">
           ${state.page === 'library' ? `<button class="btn ghost" id="export-md">导出 MD</button>` : ''}
           <button class="btn" id="add-novel-primary">+ 添加小说</button>
-          <span class="user-chip" title="${escapeHtml(state.user.email || '')}">${escapeHtml(state.user.email || '已登录')}</span>
-          <button class="btn ghost" id="sign-out" type="button">退出</button>
+          <span class="user-chip" title="${escapeHtml(state.user.email || '')}">${escapeHtml(shortUserLabel(state.user.email))}</span>
+          <button class="btn ghost" id="sign-out" type="button" title="${escapeHtml(state.user.email || '')}">退出</button>
         </div>
         ${
           state.page === 'library'
