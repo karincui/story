@@ -121,19 +121,12 @@ export async function downloadAttachmentBlob(path) {
   return data
 }
 
-/** 读取 txt 等文本附件；优先 UTF-8，失败再试 GBK（常见网文编码） */
+/** 读取 txt 等文本附件（自动识别 UTF-8 / UTF-16 / GBK，兼容网文与 Safari） */
 export async function fetchAttachmentText(path) {
+  const { decodeTextBuffer } = await import('./decodeText.js')
   const blob = await downloadAttachmentBlob(path)
   const buf = await blob.arrayBuffer()
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(buf)
-  } catch {
-    try {
-      return new TextDecoder('gbk').decode(buf)
-    } catch {
-      return new TextDecoder('utf-8').decode(buf)
-    }
-  }
+  return decodeTextBuffer(buf)
 }
 
 async function requireUserId() {
