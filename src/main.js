@@ -1448,7 +1448,7 @@ function bindSwipe() {
       if (locked !== 'h') return
       e?.preventDefault?.()
       moved = true
-      const openX = swipeOpenX()
+      const openX = swipeOpenX(item)
       currentX = Math.min(0, Math.max(openX, baseX + dx))
       content.style.transform = `translateX(${currentX}px)`
     }
@@ -1473,7 +1473,7 @@ function bindSwipe() {
         return
       }
 
-      const openX = swipeOpenX()
+      const openX = swipeOpenX(item)
       const shouldOpen = currentX < openX / 2
       if (shouldOpen) {
         closeAllSwipes(content)
