@@ -239,21 +239,87 @@ button {
   text-align: center;
 }
 
-.user-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--teal, #3d7a7a) 14%, transparent);
-  color: var(--teal, #3d7a7a);
-  align-self: center;
+.account-menu {
+  position: relative;
   flex-shrink: 0;
 }
 
-.user-chip .user-icon {
+.account-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line-soft);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--teal, #3d7a7a) 12%, #fff);
+  color: var(--teal, #3d7a7a);
+  cursor: pointer;
+}
+
+.account-menu-btn:hover,
+.account-menu-btn[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--teal) 40%, var(--line));
+  background: color-mix(in srgb, var(--teal) 18%, #fff);
+}
+
+.account-menu-btn .user-icon {
   display: block;
+}
+
+.account-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: #fff;
+  box-shadow: 0 10px 28px rgba(20, 30, 40, 0.14);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.account-dropdown[hidden] {
+  display: none !important;
+}
+
+.account-email {
+  margin: 0;
+  padding: 8px 10px 6px;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+  word-break: break-all;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 4px;
+}
+
+.account-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.account-item:hover {
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
+}
+
+.account-item.danger {
+  color: #a33d3d;
+}
+
+.account-item.danger:hover {
+  background: color-mix(in srgb, #c45c5c 12%, transparent);
 }
 
 /* Header */
@@ -344,10 +410,15 @@ button {
 .top-actions {
   grid-area: actions;
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   align-items: center;
+}
+
+.top-actions .btn {
+  white-space: nowrap;
+  padding: 7px 12px;
 }
 
 .search-wrap {
