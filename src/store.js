@@ -40,12 +40,29 @@ function rowToNovel(row) {
   }
 }
 
+/** Storage 对象 key 只能用安全 ASCII；展示仍用原始中文名 attachment_name */
 function safeFileName(name) {
-  const base = String(name || 'file')
-    .replace(/[\\/:*?"<>|]+/g, '_')
-    .replace(/\s+/g, '_')
-    .slice(0, 80)
-  return base || 'file'
+  const raw = String(name || 'file')
+  const extMatch = raw.match(/(\.[A-Za-z0-9]{1,10})$/)
+  const ext = extMatch ? extMatch[1].toLowerCase() : ''
+  const stem = raw
+    .slice(0, Math.max(0, raw.length - ext.length))
+    .replace(/[^A-Za-z0-9._-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[_.-]+|[_.-]+$/g, '')
+    .slice(0, 40)
+  return `${stem || 'file'}${ext || '.bin'}`
+}
+
+function friendlyStorageError(err) {
+  const msg = err?.message || String(err)
+  if (/bucket not found/i.test(msg)) {
+    return '存储桶未创建：请到 Supabase → SQL Editor 执行 supabase/migration_attachment.sql，或在 Storage 新建私有桶 novel-attachments'
+  }
+  if (/invalid key/i.test(msg)) {
+    return '附件文件名不合法，请换一个更简单的英文文件名后再试'
+  }
+  return msg
 }
 
 async function removeStoragePath(path) {
@@ -62,9 +79,9 @@ async function uploadAttachmentFile(userId, novelId, file) {
   const path = `${userId}/${novelId}/${Date.now()}_${safeFileName(file.name)}`
   const { error } = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, {
     upsert: false,
-    contentType: file.type || undefined,
+    contentType: file.type || 'text/plain',
   })
-  if (error) throw error
+  if (error) throw new Error(friendlyStorageError(error))
   return {
     attachment_path: path,
     attachment_name: file.name || '附件',
