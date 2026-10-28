@@ -1244,6 +1244,36 @@ button {
   color: var(--reader-fg);
 }
 
+.reader-progress-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reader-progress-meta .btn.ghost.sm {
+  margin-left: auto;
+}
+
+.reader-progress-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--reader-line);
+  background: var(--reader-panel);
+  color: var(--reader-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 8px 14px max(10px, env(safe-area-inset-bottom));
+  cursor: pointer;
+}
+
+.reader-progress-chip:hover {
+  color: var(--reader-fg);
+}
+
 .reader-setting-row {
   display: flex;
   align-items: center;

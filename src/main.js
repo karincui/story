@@ -97,6 +97,8 @@ const state = {
   readerCustomBgImage: localStorage.getItem('novel-reader-custom-bg-image') || '',
   /** 阅读器「背景/编码」面板是否展开 */
   readerSettingsOpen: false,
+  /** 阅读器进度条是否展开 */
+  readerProgressOpen: false,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -1173,10 +1175,14 @@ function renderTxtReader() {
   const fg = state.readerCustomFg || '#2a241c'
   const hasImg = Boolean(state.readerCustomBgImage)
   const settingsOpen = Boolean(state.readerSettingsOpen)
+  const progressOpen = Boolean(state.readerProgressOpen)
   const themeLabel =
     theme === 'eye-care' ? '护眼绿' : theme === 'night' ? '深夜' : theme === 'custom' ? '自定义' : '米白'
   const encLabel =
     enc === 'gbk' ? 'GBK' : enc === 'utf-8' ? 'UTF-8' : enc === 'utf-16le' || enc === 'utf-16be' ? 'UTF-16' : '自动'
+  const pageNow = state.readerPage || 1
+  const pageTotal = state.readerTotalPages || 1
+  const pctNow = state.readerPercent || 0
   const encBtn = (id, label) =>
     `<button type="button" class="btn ghost sm reader-enc ${enc === id ? 'active' : ''}" data-reader-enc="${id}">${label}</button>`
   const themeBtn = (id, label, swatch) =>
@@ -1193,6 +1199,7 @@ function renderTxtReader() {
           <button type="button" class="btn ghost sm" id="reader-font-down" title="缩小字号">A-</button>
           <button type="button" class="btn ghost sm" id="reader-font-up" title="放大字号">A+</button>
           <button type="button" class="btn ghost sm ${settingsOpen ? 'active-settings' : ''}" id="reader-settings-toggle" aria-expanded="${settingsOpen ? 'true' : 'false'}" title="背景与编码">设置</button>
+          <button type="button" class="btn ghost sm ${progressOpen ? 'active-settings' : ''}" id="reader-progress-toggle" aria-expanded="${progressOpen ? 'true' : 'false'}" title="阅读进度">进度</button>
         </div>
       </header>
       <div class="reader-settings-bar" id="reader-settings-bar" ${settingsOpen ? '' : 'hidden'}>
@@ -1244,14 +1251,17 @@ function renderTxtReader() {
             : `<pre class="reader-text">${escapeHtml(state.readerText)}</pre>`
         }
       </div>
-      <footer class="reader-progress" aria-label="阅读进度">
+      ${
+        progressOpen
+          ? `<footer class="reader-progress" aria-label="阅读进度">
         <div class="reader-progress-meta">
-          <span id="reader-page-label">${state.readerPage || 1} / ${state.readerTotalPages || 1}</span>
-          <span id="reader-pct-label">${state.readerPercent || 0}%</span>
+          <span id="reader-page-label">${pageNow} / ${pageTotal}</span>
+          <span id="reader-pct-label">${pctNow}%</span>
+          <button type="button" class="btn ghost sm" id="reader-progress-collapse" title="收起进度条">收起</button>
         </div>
         <div class="reader-slider-wrap">
           <div class="reader-progress-track" aria-hidden="true">
-            <div class="reader-progress-fill" id="reader-progress-fill" style="width:${state.readerPercent || 0}%"></div>
+            <div class="reader-progress-fill" id="reader-progress-fill" style="width:${pctNow}%"></div>
           </div>
           <input
             type="range"
@@ -1260,11 +1270,17 @@ function renderTxtReader() {
             min="0"
             max="100"
             step="0.1"
-            value="${state.readerPercent || 0}"
+            value="${pctNow}"
             aria-label="拖动跳转阅读进度"
           />
         </div>
-      </footer>
+      </footer>`
+          : `<button type="button" class="reader-progress-chip" id="reader-progress-chip" title="展开进度条">
+        <span id="reader-page-label">${pageNow} / ${pageTotal}</span>
+        <span id="reader-pct-label">${pctNow}%</span>
+        <span aria-hidden="true">▴</span>
+      </button>`
+      }
     </div>
   `
 }
@@ -1343,6 +1359,18 @@ function bindTxtReader() {
   }
   app.querySelector('#reader-settings-toggle')?.addEventListener('click', toggleReaderSettings)
   app.querySelector('#reader-settings-chip')?.addEventListener('click', toggleReaderSettings)
+
+  const toggleReaderProgress = () => {
+    state.readerProgressOpen = !state.readerProgressOpen
+    render()
+  }
+  app.querySelector('#reader-progress-toggle')?.addEventListener('click', toggleReaderProgress)
+  app.querySelector('#reader-progress-chip')?.addEventListener('click', toggleReaderProgress)
+  app.querySelector('#reader-progress-collapse')?.addEventListener('click', () => {
+    state.readerProgressOpen = false
+    render()
+  })
+
   app.querySelectorAll('[data-reader-theme]').forEach((btn) => {
     btn.addEventListener('click', () => {
       setReaderTheme(btn.dataset.readerTheme)
