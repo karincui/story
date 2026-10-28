@@ -826,19 +826,29 @@ function loadReaderProgress(novelId) {
   }
 }
 
-function updateReaderProgressUi() {
-  const body = app.querySelector('#reader-body')
-  const fill = app.querySelector('#reader-progress-fill')
-  const pageLabel = app.querySelector('#reader-page-label')
-  const pctLabel = app.querySelector('#reader-pct-label')
-  if (!body) return
+let readerSeeking = false
 
+function getReaderScrollMetrics() {
+  const body = app.querySelector('#reader-body')
+  if (!body) return null
   const viewH = Math.max(1, body.clientHeight)
   const totalH = Math.max(viewH, body.scrollHeight)
   const maxScroll = Math.max(0, totalH - viewH)
+  return { body, viewH, totalH, maxScroll }
+}
+
+function updateReaderProgressUi() {
+  const m = getReaderScrollMetrics()
+  const slider = app.querySelector('#reader-progress-slider')
+  const fill = app.querySelector('#reader-progress-fill')
+  const pageLabel = app.querySelector('#reader-page-label')
+  const pctLabel = app.querySelector('#reader-pct-label')
+  if (!m) return
+
+  const { body, viewH, totalH, maxScroll } = m
   const scroll = body.scrollTop
   const totalPages = Math.max(1, Math.ceil(totalH / viewH))
-  let page =
+  const page =
     maxScroll <= 0
       ? 1
       : scroll + viewH >= totalH - 4
@@ -850,10 +860,39 @@ function updateReaderProgressUi() {
   state.readerTotalPages = totalPages
   state.readerPercent = percent
 
-  if (fill) fill.style.width = `${percent}%`
+  if (!readerSeeking) {
+    if (slider) slider.value = String(percent)
+    if (fill) fill.style.width = `${percent}%`
+  }
   if (pageLabel) pageLabel.textContent = `${page} / ${totalPages}`
   if (pctLabel) pctLabel.textContent = `${percent}%`
-  saveReaderProgress()
+  if (!readerSeeking) saveReaderProgress()
+}
+
+function seekReaderByPercent(percent) {
+  const m = getReaderScrollMetrics()
+  const fill = app.querySelector('#reader-progress-fill')
+  const pageLabel = app.querySelector('#reader-page-label')
+  const pctLabel = app.querySelector('#reader-pct-label')
+  if (!m) return
+  const pct = Math.max(0, Math.min(100, Number(percent) || 0))
+  const { body, viewH, totalH, maxScroll } = m
+  body.scrollTop = maxScroll <= 0 ? 0 : (pct / 100) * maxScroll
+  if (fill) fill.style.width = `${pct}%`
+
+  const scroll = body.scrollTop
+  const totalPages = Math.max(1, Math.ceil(totalH / viewH))
+  const page =
+    maxScroll <= 0
+      ? 1
+      : scroll + viewH >= totalH - 4
+        ? totalPages
+        : Math.min(totalPages, Math.floor(scroll / viewH) + 1)
+  state.readerPage = page
+  state.readerTotalPages = totalPages
+  state.readerPercent = pct
+  if (pageLabel) pageLabel.textContent = `${page} / ${totalPages}`
+  if (pctLabel) pctLabel.textContent = `${Math.round(pct)}%`
 }
 
 function renderTxtReader() {
@@ -886,12 +925,24 @@ function renderTxtReader() {
         }
       </div>
       <footer class="reader-progress" aria-label="阅读进度">
-        <div class="reader-progress-track">
-          <div class="reader-progress-fill" id="reader-progress-fill" style="width:${state.readerPercent || 0}%"></div>
-        </div>
         <div class="reader-progress-meta">
           <span id="reader-page-label">${state.readerPage || 1} / ${state.readerTotalPages || 1}</span>
           <span id="reader-pct-label">${state.readerPercent || 0}%</span>
+        </div>
+        <div class="reader-slider-wrap">
+          <div class="reader-progress-track" aria-hidden="true">
+            <div class="reader-progress-fill" id="reader-progress-fill" style="width:${state.readerPercent || 0}%"></div>
+          </div>
+          <input
+            type="range"
+            id="reader-progress-slider"
+            class="reader-progress-slider"
+            min="0"
+            max="100"
+            step="0.1"
+            value="${state.readerPercent || 0}"
+            aria-label="拖动跳转阅读进度"
+          />
         </div>
       </footer>
     </div>
@@ -934,10 +985,28 @@ function bindTxtReader() {
   body?.addEventListener(
     'scroll',
     () => {
+      if (readerSeeking) return
       updateReaderProgressUi()
     },
     { passive: true },
   )
+
+  const slider = app.querySelector('#reader-progress-slider')
+  const endSeek = () => {
+    readerSeeking = false
+    updateReaderProgressUi()
+    saveReaderProgress()
+  }
+  slider?.addEventListener('pointerdown', () => {
+    readerSeeking = true
+  })
+  slider?.addEventListener('pointerup', endSeek)
+  slider?.addEventListener('pointercancel', endSeek)
+  slider?.addEventListener('change', endSeek)
+  slider?.addEventListener('input', () => {
+    readerSeeking = true
+    seekReaderByPercent(slider.value)
+  })
 
   app.querySelector('#reader-font-down')?.addEventListener('click', () => {
     state.readerFontSize = Math.max(14, (state.readerFontSize || 18) - 2)
