@@ -954,6 +954,52 @@ button {
   --reader-accent: #c5d0d9;
 }
 
+.reader-shell.theme-custom {
+  --reader-bg: #f7f3ea;
+  --reader-fg: #2a241c;
+}
+
+.reader-custom-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reader-custom-panel[hidden] {
+  display: none !important;
+}
+
+.reader-color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--reader-muted);
+}
+
+.reader-color-field input[type='color'] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--reader-line);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.reader-file-btn {
+  cursor: pointer;
+}
+
+.reader-shell.has-bg-image .reader-text {
+  text-shadow:
+    0 0 6px color-mix(in srgb, var(--reader-bg) 85%, transparent),
+    0 1px 2px color-mix(in srgb, var(--reader-bg) 70%, transparent);
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--reader-bg) 72%, transparent);
+}
+
 .reader-bar {
   display: grid;
   grid-template-columns: auto 1fr auto;
