@@ -27,6 +27,7 @@ import { parseOcrText } from './parseBooks.js'
 import { tagStyleAttr } from './tagColors.js'
 import { parseExcelFile, downloadExcelTemplate } from './excelImport.js'
 import { listImages, addImages, getImage, deleteImage, deleteImages } from './imageStore.js'
+import { cropImageToFile } from './cropImage.js'
 
 const state = {
   page: 'library', // library | import | excel | gallery
@@ -41,6 +42,8 @@ const state = {
   importDrafts: [],
   batchTags: ['未读'],
   rawOcr: '',
+  /** @type {number|null} */
+  cropIndex: null,
   recognizing: false,
   progress: { label: '', pct: 0 },
   importMsg: '',
@@ -337,6 +340,7 @@ function render() {
     ${state.editingId !== null ? renderModal() : ''}
     ${state.galleryPreviewId ? renderGalleryLightbox() : ''}
     ${state.readerOpen ? renderTxtReader() : ''}
+    ${state.cropIndex !== null ? renderCropModal() : ''}
   `
   bindEvents()
   // 整页重绘会把滚动顶回顶部；恢复位置，避免移除/改标签后跳回第一条
@@ -706,7 +710,7 @@ function renderImport() {
         <div class="dropzone" id="dropzone">
           <div class="dropzone-icon">图</div>
           <p>拖拽截图 / 封面到这里</p>
-          <span class="muted">支持多张 · 点缩略图可移除</span>
+          <span class="muted">支持多张 · 点图裁剪 · 点 × 移除</span>
           <button class="btn" id="pick-files" type="button">选择文件</button>
           <input type="file" id="file-input" accept="image/*" multiple hidden />
         </div>
@@ -714,10 +718,17 @@ function renderImport() {
           importFiles.length
             ? `<div class="thumbs">${importFiles
                 .map(
-                  (f, i) =>
-                    `<img class="thumb" src="${f.preview}" alt="" title="${escapeHtml(f.file.name)}" data-rm-file="${i}" />`,
+                  (f, i) => `
+                  <div class="thumb-wrap">
+                    <button type="button" class="thumb-btn" data-crop-file="${i}" title="点击裁剪">
+                      <img class="thumb" src="${f.preview}" alt="" />
+                      <span class="thumb-crop-hint">裁剪</span>
+                    </button>
+                    <button type="button" class="thumb-rm" data-rm-file="${i}" title="移除" aria-label="移除">×</button>
+                  </div>`,
                 )
-                .join('')}</div>`
+                .join('')}</div>
+              <p class="muted thumb-tip">点缩略图可裁剪；点 × 移除</p>`
             : ''
         }
         <div class="progress-box">
@@ -1717,6 +1728,7 @@ function bindEvents() {
   bindExcel()
   bindGallery()
   bindTxtReader()
+  bindCropModal()
 }
 
 function bindGallery() {
@@ -2212,6 +2224,195 @@ function bindModal() {
   )
 }
 
+/** @type {{ index: number, natW: number, natH: number, sel: { x: number, y: number, w: number, h: number } } | null} */
+let cropSession = null
+
+function closeCropModal() {
+  state.cropIndex = null
+  cropSession = null
+  render()
+}
+
+function renderCropModal() {
+  const item = state.importFiles[state.cropIndex]
+  if (!item) return ''
+  return `
+    <div class="modal-backdrop crop-backdrop" id="crop-backdrop">
+      <div class="crop-modal" role="dialog" aria-modal="true" aria-label="裁剪图片">
+        <div class="crop-modal-head">
+          <h2>裁剪图片</h2>
+          <p class="muted">拖动选区，拖角缩放；裁掉无关内容再识别更准</p>
+        </div>
+        <div class="crop-stage" id="crop-stage">
+          <img id="crop-img" class="crop-img" src="${item.preview}" alt="" draggable="false" />
+          <div class="crop-box" id="crop-box" hidden>
+            <span class="crop-handle" data-handle="nw"></span>
+            <span class="crop-handle" data-handle="ne"></span>
+            <span class="crop-handle" data-handle="sw"></span>
+            <span class="crop-handle" data-handle="se"></span>
+          </div>
+        </div>
+        <div class="crop-modal-actions">
+          <button type="button" class="btn ghost" id="crop-cancel">取消</button>
+          <button type="button" class="btn ghost" id="crop-reset">重置</button>
+          <button type="button" class="btn" id="crop-apply">完成裁剪</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function syncCropBoxDom() {
+  const img = app.querySelector('#crop-img')
+  const box = app.querySelector('#crop-box')
+  if (!img || !box || !cropSession) return
+  const scaleX = img.clientWidth / cropSession.natW
+  const scaleY = img.clientHeight / cropSession.natH
+  const { x, y, w, h } = cropSession.sel
+  box.hidden = false
+  box.style.left = `${x * scaleX}px`
+  box.style.top = `${y * scaleY}px`
+  box.style.width = `${w * scaleX}px`
+  box.style.height = `${h * scaleY}px`
+}
+
+function clampCropSel(sel, natW, natH) {
+  const min = 24
+  let { x, y, w, h } = sel
+  w = Math.max(min, Math.min(w, natW))
+  h = Math.max(min, Math.min(h, natH))
+  x = Math.max(0, Math.min(x, natW - w))
+  y = Math.max(0, Math.min(y, natH - h))
+  return { x, y, w, h }
+}
+
+function initCropSelection(natW, natH) {
+  const pad = Math.round(Math.min(natW, natH) * 0.06)
+  return clampCropSel(
+    {
+      x: pad,
+      y: pad,
+      w: Math.max(24, natW - pad * 2),
+      h: Math.max(24, natH - pad * 2),
+    },
+    natW,
+    natH,
+  )
+}
+
+function bindCropModal() {
+  if (state.cropIndex === null) return
+  const item = state.importFiles[state.cropIndex]
+  if (!item) {
+    closeCropModal()
+    return
+  }
+
+  const img = app.querySelector('#crop-img')
+  const box = app.querySelector('#crop-box')
+  const stage = app.querySelector('#crop-stage')
+  if (!img || !box || !stage) return
+
+  const setup = () => {
+    cropSession = {
+      index: state.cropIndex,
+      natW: img.naturalWidth || img.width,
+      natH: img.naturalHeight || img.height,
+      sel: initCropSelection(img.naturalWidth || img.width, img.naturalHeight || img.height),
+    }
+    syncCropBoxDom()
+  }
+
+  if (img.complete && img.naturalWidth) setup()
+  else img.addEventListener('load', setup, { once: true })
+
+  app.querySelector('#crop-cancel')?.addEventListener('click', () => closeCropModal())
+  app.querySelector('#crop-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'crop-backdrop') closeCropModal()
+  })
+  app.querySelector('#crop-reset')?.addEventListener('click', () => {
+    if (!cropSession) return
+    cropSession.sel = initCropSelection(cropSession.natW, cropSession.natH)
+    syncCropBoxDom()
+  })
+  app.querySelector('#crop-apply')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      if (!cropSession) return
+      const idx = cropSession.index
+      const src = state.importFiles[idx]
+      if (!src) {
+        closeCropModal()
+        return
+      }
+      try {
+        await runBusy('裁剪中…', async () => {
+          const mime = src.file.type && src.file.type.startsWith('image/') ? src.file.type : 'image/jpeg'
+          const file = await cropImageToFile(src.preview, cropSession.sel, src.file.name, mime)
+          URL.revokeObjectURL(src.preview)
+          state.importFiles[idx] = {
+            file,
+            preview: URL.createObjectURL(file),
+          }
+          state.importMsg = `已裁剪：${file.name}`
+        })
+        state.cropIndex = null
+        cropSession = null
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
+
+  /** @type {{ mode: 'move'|'nw'|'ne'|'sw'|'se', startX: number, startY: number, orig: {x:number,y:number,w:number,h:number} } | null} */
+  let drag = null
+
+  const onPointerMove = (e) => {
+    if (!drag || !cropSession || !img) return
+    const scaleX = cropSession.natW / img.clientWidth
+    const scaleY = cropSession.natH / img.clientHeight
+    const dx = (e.clientX - drag.startX) * scaleX
+    const dy = (e.clientY - drag.startY) * scaleY
+    const o = drag.orig
+    let next = { ...o }
+    if (drag.mode === 'move') {
+      next = { x: o.x + dx, y: o.y + dy, w: o.w, h: o.h }
+    } else if (drag.mode === 'se') {
+      next = { x: o.x, y: o.y, w: o.w + dx, h: o.h + dy }
+    } else if (drag.mode === 'nw') {
+      next = { x: o.x + dx, y: o.y + dy, w: o.w - dx, h: o.h - dy }
+    } else if (drag.mode === 'ne') {
+      next = { x: o.x, y: o.y + dy, w: o.w + dx, h: o.h - dy }
+    } else if (drag.mode === 'sw') {
+      next = { x: o.x + dx, y: o.y, w: o.w - dx, h: o.h + dy }
+    }
+    cropSession.sel = clampCropSel(next, cropSession.natW, cropSession.natH)
+    syncCropBoxDom()
+  }
+
+  const endDrag = () => {
+    drag = null
+  }
+
+  box.addEventListener('pointerdown', (e) => {
+    if (!cropSession) return
+    const handle = e.target?.dataset?.handle
+    e.preventDefault()
+    e.stopPropagation()
+    box.setPointerCapture?.(e.pointerId)
+    drag = {
+      mode: handle || 'move',
+      startX: e.clientX,
+      startY: e.clientY,
+      orig: { ...cropSession.sel },
+    }
+  })
+  box.addEventListener('pointermove', onPointerMove)
+  box.addEventListener('pointerup', endDrag)
+  box.addEventListener('pointercancel', endDrag)
+}
+
 function bindImport() {
   if (state.page !== 'import') return
 
@@ -2352,11 +2553,31 @@ function bindImport() {
     }),
   )
 
-  app.querySelectorAll('[data-rm-file]').forEach((img) => {
-    img.addEventListener('click', () => {
-      const i = Number(img.dataset.rmFile)
+  app.querySelectorAll('[data-crop-file]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const i = Number(btn.dataset.cropFile)
+      if (Number.isNaN(i) || !state.importFiles[i]) return
+      state.cropIndex = i
+      render()
+    })
+  })
+
+  app.querySelectorAll('[data-rm-file]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const i = Number(btn.dataset.rmFile)
+      if (Number.isNaN(i) || !state.importFiles[i]) return
       URL.revokeObjectURL(state.importFiles[i].preview)
       state.importFiles.splice(i, 1)
+      if (state.cropIndex === i) {
+        state.cropIndex = null
+        cropSession = null
+      } else if (state.cropIndex != null && state.cropIndex > i) {
+        state.cropIndex -= 1
+      }
       render()
     })
   })
