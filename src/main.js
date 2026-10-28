@@ -74,8 +74,11 @@ const state = {
   readerPage: 1,
   readerTotalPages: 1,
   readerPercent: 0,
-  /** parchment | eye-care | night */
+  /** parchment | eye-care | night | custom */
   readerTheme: localStorage.getItem('novel-reader-theme') || 'parchment',
+  readerCustomBg: localStorage.getItem('novel-reader-custom-bg') || '#f7f3ea',
+  readerCustomFg: localStorage.getItem('novel-reader-custom-fg') || '#2a241c',
+  readerCustomBgImage: localStorage.getItem('novel-reader-custom-bg-image') || '',
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -897,28 +900,171 @@ function seekReaderByPercent(percent) {
   if (pctLabel) pctLabel.textContent = `${Math.round(pct)}%`
 }
 
-function setReaderTheme(theme) {
-  const next = ['parchment', 'eye-care', 'night'].includes(theme) ? theme : 'parchment'
-  state.readerTheme = next
+const READER_THEMES = ['parchment', 'eye-care', 'night', 'custom']
+const READER_LS = {
+  theme: 'novel-reader-theme',
+  bg: 'novel-reader-custom-bg',
+  fg: 'novel-reader-custom-fg',
+  bgImage: 'novel-reader-custom-bg-image',
+}
+
+function saveReaderPref(key, value) {
   try {
-    localStorage.setItem('novel-reader-theme', next)
-  } catch {
-    /* ignore */
+    if (value) localStorage.setItem(key, value)
+    else localStorage.removeItem(key)
+  } catch (err) {
+    if (String(err?.name || err).includes('Quota')) {
+      alert('本地存储空间不足，背景图可能过大，请换一张更小的图')
+    }
   }
-  const shell = app.querySelector('#txt-reader')
-  if (shell) {
-    shell.classList.remove('theme-parchment', 'theme-eye-care', 'theme-night')
-    shell.classList.add(`theme-${next}`)
+}
+
+function hexToRgba(hex, alpha) {
+  const m = String(hex || '')
+    .trim()
+    .match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!m) return `rgba(0,0,0,${alpha})`
+  let h = m[1]
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('')
+  const n = parseInt(h, 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function applyReaderAppearance(shell = app.querySelector('#txt-reader')) {
+  if (!shell) return
+  const theme = READER_THEMES.includes(state.readerTheme) ? state.readerTheme : 'parchment'
+  shell.classList.remove('theme-parchment', 'theme-eye-care', 'theme-night', 'theme-custom', 'has-bg-image')
+  shell.classList.add(`theme-${theme}`)
+
+  const body = shell.querySelector('#reader-body')
+  if (theme === 'custom') {
+    const bg = state.readerCustomBg || '#f7f3ea'
+    const fg = state.readerCustomFg || '#2a241c'
+    shell.style.setProperty('--reader-bg', bg)
+    shell.style.setProperty('--reader-fg', fg)
+    shell.style.setProperty('--reader-muted', hexToRgba(fg, 0.65))
+    shell.style.setProperty('--reader-line', hexToRgba(fg, 0.14))
+    shell.style.setProperty('--reader-panel', hexToRgba(bg, 0.92))
+    shell.style.setProperty('--reader-track', hexToRgba(fg, 0.12))
+    shell.style.setProperty('--reader-thumb', fg)
+    shell.style.setProperty('--reader-fill', `linear-gradient(90deg, ${hexToRgba(fg, 0.45)}, ${fg})`)
+    shell.style.setProperty('--reader-accent', fg)
+    if (state.readerCustomBgImage) {
+      shell.classList.add('has-bg-image')
+      shell.style.setProperty('--reader-bg-image', `url("${state.readerCustomBgImage}")`)
+      if (body) {
+        body.style.backgroundImage = `url("${state.readerCustomBgImage}")`
+        body.style.backgroundSize = 'cover'
+        body.style.backgroundPosition = 'center'
+        body.style.backgroundAttachment = 'local'
+        body.style.backgroundColor = bg
+      }
+    } else {
+      shell.style.removeProperty('--reader-bg-image')
+      if (body) {
+        body.style.backgroundImage = ''
+        body.style.backgroundSize = ''
+        body.style.backgroundPosition = ''
+        body.style.backgroundAttachment = ''
+        body.style.backgroundColor = ''
+      }
+    }
+  } else {
+    ;[
+      '--reader-bg',
+      '--reader-fg',
+      '--reader-muted',
+      '--reader-line',
+      '--reader-panel',
+      '--reader-track',
+      '--reader-thumb',
+      '--reader-fill',
+      '--reader-accent',
+      '--reader-bg-image',
+    ].forEach((k) => shell.style.removeProperty(k))
+    if (body) {
+      body.style.backgroundImage = ''
+      body.style.backgroundSize = ''
+      body.style.backgroundPosition = ''
+      body.style.backgroundAttachment = ''
+      body.style.backgroundColor = ''
+    }
   }
+
   app.querySelectorAll('[data-reader-theme]').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.readerTheme === next)
+    btn.classList.toggle('active', btn.dataset.readerTheme === theme)
   })
+  const customPanel = app.querySelector('#reader-custom-panel')
+  if (customPanel) customPanel.hidden = theme !== 'custom'
+}
+
+function setReaderTheme(theme) {
+  const next = READER_THEMES.includes(theme) ? theme : 'parchment'
+  state.readerTheme = next
+  saveReaderPref(READER_LS.theme, next)
+  applyReaderAppearance()
+}
+
+function setReaderCustomColors({ bg, fg } = {}) {
+  if (bg) {
+    state.readerCustomBg = bg
+    saveReaderPref(READER_LS.bg, bg)
+  }
+  if (fg) {
+    state.readerCustomFg = fg
+    saveReaderPref(READER_LS.fg, fg)
+  }
+  if (state.readerTheme !== 'custom') setReaderTheme('custom')
+  else applyReaderAppearance()
+}
+
+async function compressImageFile(file, maxSide = 1280, quality = 0.72) {
+  const bitmap = await createImageBitmap(file)
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * scale))
+  const h = Math.max(1, Math.round(bitmap.height * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(bitmap, 0, 0, w, h)
+  bitmap.close?.()
+  const dataUrl = canvas.toDataURL('image/jpeg', quality)
+  if (dataUrl.length > 1_800_000) {
+    return canvas.toDataURL('image/jpeg', 0.55)
+  }
+  return dataUrl
+}
+
+async function setReaderBgImageFromFile(file) {
+  if (!file) return
+  if (!file.type.startsWith('image/')) {
+    alert('请选择图片文件')
+    return
+  }
+  const dataUrl = await compressImageFile(file)
+  state.readerCustomBgImage = dataUrl
+  saveReaderPref(READER_LS.bgImage, dataUrl)
+  if (state.readerTheme !== 'custom') setReaderTheme('custom')
+  else applyReaderAppearance()
+}
+
+function clearReaderBgImage() {
+  state.readerCustomBgImage = ''
+  saveReaderPref(READER_LS.bgImage, '')
+  applyReaderAppearance()
 }
 
 function renderTxtReader() {
   const size = state.readerFontSize || 18
   const enc = state.readerEncoding || 'auto'
-  const theme = state.readerTheme || 'parchment'
+  const theme = READER_THEMES.includes(state.readerTheme) ? state.readerTheme : 'parchment'
+  const bg = state.readerCustomBg || '#f7f3ea'
+  const fg = state.readerCustomFg || '#2a241c'
+  const hasImg = Boolean(state.readerCustomBgImage)
   const encBtn = (id, label) =>
     `<button type="button" class="btn ghost sm reader-enc ${enc === id ? 'active' : ''}" data-reader-enc="${id}">${label}</button>`
   const themeBtn = (id, label, swatch) =>
@@ -927,7 +1073,7 @@ function renderTxtReader() {
       <span>${label}</span>
     </button>`
   return `
-    <div class="reader-shell theme-${theme}" id="txt-reader" role="dialog" aria-modal="true" aria-label="TXT 阅读器">
+    <div class="reader-shell theme-${theme}${theme === 'custom' && hasImg ? ' has-bg-image' : ''}" id="txt-reader" role="dialog" aria-modal="true" aria-label="TXT 阅读器">
       <header class="reader-bar">
         <button type="button" class="btn ghost sm" id="reader-close">关闭</button>
         <h2 class="reader-title">${escapeHtml(state.readerTitle || '阅读')}</h2>
@@ -943,6 +1089,24 @@ function renderTxtReader() {
             ${themeBtn('parchment', '米白', '#f7f3ea')}
             ${themeBtn('eye-care', '护眼绿', '#c7e0c4')}
             ${themeBtn('night', '深夜', '#2b2f33')}
+            ${themeBtn('custom', '自定义', bg)}
+          </div>
+        </div>
+        <div class="reader-custom-panel" id="reader-custom-panel" ${theme === 'custom' ? '' : 'hidden'}>
+          <div class="reader-setting-row">
+            <label class="reader-color-field">
+              <span>底色</span>
+              <input type="color" id="reader-bg-color" value="${escapeHtml(bg)}" aria-label="背景颜色" />
+            </label>
+            <label class="reader-color-field">
+              <span>字色</span>
+              <input type="color" id="reader-fg-color" value="${escapeHtml(fg)}" aria-label="字体颜色" />
+            </label>
+            <label class="btn ghost sm reader-file-btn">
+              背景图
+              <input type="file" id="reader-bg-image" accept="image/*" hidden />
+            </label>
+            <button type="button" class="btn ghost sm" id="reader-bg-image-clear" ${hasImg ? '' : 'hidden'}>清除图片</button>
           </div>
         </div>
         <div class="reader-setting-row">
@@ -1061,6 +1225,38 @@ function bindTxtReader() {
       setReaderTheme(btn.dataset.readerTheme)
     })
   })
+
+  app.querySelector('#reader-bg-color')?.addEventListener('input', (e) => {
+    setReaderCustomColors({ bg: e.target.value })
+  })
+  app.querySelector('#reader-fg-color')?.addEventListener('input', (e) => {
+    setReaderCustomColors({ fg: e.target.value })
+  })
+  app.querySelector('#reader-bg-image')?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      state.actionBusyLabel = '处理背景图…'
+      state.actionBusy = true
+      mountBusyOverlay()
+      await setReaderBgImageFromFile(file)
+      const clearBtn = app.querySelector('#reader-bg-image-clear')
+      if (clearBtn) clearBtn.hidden = !state.readerCustomBgImage
+    } catch (err) {
+      alert(err.message || String(err))
+    } finally {
+      state.actionBusy = false
+      unmountBusyOverlay()
+    }
+  })
+  app.querySelector('#reader-bg-image-clear')?.addEventListener('click', () => {
+    clearReaderBgImage()
+    const clearBtn = app.querySelector('#reader-bg-image-clear')
+    if (clearBtn) clearBtn.hidden = true
+  })
+
+  applyReaderAppearance()
 
   app.querySelectorAll('[data-reader-enc]').forEach((btn) => {
     btn.addEventListener('click', async () => {
