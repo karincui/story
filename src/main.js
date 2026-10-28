@@ -9,7 +9,6 @@ import {
   deleteNovel,
   getNovel,
   setNovelRead,
-  exportMarkdown,
   moveNovelInView,
   refreshStore,
   getAttachmentSignedUrl,
@@ -24,7 +23,13 @@ import { recognizeImages, preloadOcr } from './ocr.js'
 import { parseOcrText } from './parseBooks.js'
 import { tagStyleAttr } from './tagColors.js'
 import { parseExcelFile, downloadExcelTemplate } from './excelImport.js'
-import { parseWishlistMarkdown } from './mdImport.js'
+import {
+  backupNovelsToBeifen,
+  loadBeifenText,
+  pickBeifenFile,
+  planRestoreFromMarkdown,
+  applyRestoreNovels,
+} from './backup.js'
 import { listImages, addImages, getImage, deleteImage, deleteImages } from './imageStore.js'
 import { cropImageToFile } from './cropImage.js'
 
@@ -325,13 +330,8 @@ function render() {
             >${USER_ICON_SVG}</button>
             <div class="account-dropdown" id="account-dropdown" hidden>
               <p class="account-email">${escapeHtml(state.user.email || '已登录')}</p>
-              ${
-                state.page === 'library'
-                  ? `<button type="button" class="account-item" id="export-md">导出 MD</button>
-              <button type="button" class="account-item" id="import-md">导入 MD</button>
-              <input type="file" id="import-md-input" accept=".md,text/markdown,text/plain" hidden />`
-                  : ''
-              }
+              <button type="button" class="account-item" id="backup-beifen">备份书架</button>
+              <button type="button" class="account-item" id="restore-beifen">从备份恢复</button>
               <button type="button" class="account-item danger" id="sign-out">退出登录</button>
             </div>
           </div>
@@ -1693,79 +1693,72 @@ function bindEvents() {
     }),
   )
 
-  app.querySelector('#export-md')?.addEventListener(
+  app.querySelector('#backup-beifen')?.addEventListener(
     'click',
-    withClickGuard(() => {
-      const novels = searchNovels({
-        query: state.query,
-        tags: state.filterTags,
-        readFilter: state.readFilter,
-      })
-      const md = exportMarkdown(novels)
-      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = '想看小说库.md'
-      a.click()
-      URL.revokeObjectURL(a.href)
+    withClickGuard(async () => {
+      try {
+        const result = await runBusy('备份中…', () => backupNovelsToBeifen())
+        if (result.wroteLocal) {
+          alert(`已备份 ${result.count} 本到项目里的 beifen.md，并下载了一份副本`)
+        } else {
+          alert(
+            `已下载 beifen.md（${result.count} 本）。\n请把它保存/覆盖到：\n小说test\\novel-app\\beifen.md\n\n（本地 npm run dev 时会自动写入该文件）`,
+          )
+        }
+      } catch (err) {
+        alert(err.message || String(err))
+      }
     }),
   )
 
-  const mdInput = app.querySelector('#import-md-input')
-  app.querySelector('#import-md')?.addEventListener('click', () => mdInput?.click())
-  mdInput?.addEventListener(
-    'change',
+  app.querySelector('#restore-beifen')?.addEventListener(
+    'click',
     withClickGuard(async () => {
-      const file = mdInput.files?.[0]
-      mdInput.value = ''
-      if (!file) return
       try {
-        const text = await file.text()
-        const rows = parseWishlistMarkdown(text)
-        if (!rows.length) {
-          alert('没有解析出书目，请确认是本站导出的 MD 格式')
+        let text = await loadBeifenText()
+        const fromLocal = Boolean(text?.trim())
+        if (!fromLocal) {
+          if (
+            !(await askConfirm(
+              '读不到项目里的 beifen.md（线上需手动选文件）。\n是否现在选择备份文件？',
+            ))
+          ) {
+            return
+          }
+          text = await pickBeifenFile()
+        }
+        if (!text?.trim()) {
+          alert('没有读到备份内容')
           return
         }
-        const existing = new Set(
-          searchNovels({ readFilter: 'all' }).map((n) => `${n.title}||${n.author || ''}`),
-        )
-        const toAdd = rows.filter((r) => !existing.has(`${r.title}||${r.author || ''}`))
-        const skipped = rows.length - toAdd.length
-        if (!toAdd.length) {
-          alert(`共 ${rows.length} 本，都已在书架上，无需重复导入`)
+        const plan = planRestoreFromMarkdown(text)
+        if (!plan.toAdd.length) {
+          alert(`备份共 ${plan.total} 本，都已在书架上`)
           return
         }
         if (
           !(await askConfirm(
-            `将导入 ${toAdd.length} 本到书架${skipped ? `（跳过已有 ${skipped} 本）` : ''}，确定？`,
+            `${fromLocal ? '将读取 beifen.md。\n' : ''}将导入 ${plan.toAdd.length} 本${
+              plan.skipped ? `（跳过已有 ${plan.skipped} 本）` : ''
+            }，确定？`,
           ))
         ) {
           return
         }
-        let ok = 0
-        const failed = []
-        await runBusy(`导入中 0/${toAdd.length}…`, async () => {
-          for (const d of toAdd) {
-            try {
-              await upsertNovel({
-                title: d.title,
-                author: d.author,
-                synopsis: d.synopsis,
-                tags: d.tags?.length ? d.tags : ['未读'],
-              })
-              ok += 1
-              state.actionBusyLabel = `导入中 ${ok}/${toAdd.length}…`
+        const result = await runBusy('恢复中…', () =>
+          applyRestoreNovels(plan.toAdd, {
+            onProgress: (label) => {
+              state.actionBusyLabel = label
               mountBusyOverlay()
-            } catch (err) {
-              failed.push(`${d.title}：${err.message || err}`)
-            }
-          }
-          await refreshStore()
-        })
-        if (failed.length) {
-          alert(`已导入 ${ok} 本，失败 ${failed.length} 本：\n${failed.slice(0, 5).join('\n')}`)
+            },
+          }),
+        )
+        if (result.failed.length) {
+          alert(
+            `已恢复 ${result.ok} 本，失败 ${result.failed.length} 本：\n${result.failed.slice(0, 5).join('\n')}`,
+          )
         } else {
-          alert(`已恢复导入 ${ok} 本`)
+          alert(`已从备份恢复 ${result.ok} 本${plan.skipped ? `（跳过已有 ${plan.skipped}）` : ''}`)
         }
         render()
       } catch (err) {

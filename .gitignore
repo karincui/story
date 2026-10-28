@@ -15,6 +15,10 @@ dist-ssr
 .env.*
 !.env.example
 
+# 本地书架备份（勿提交）
+beifen.md
+想看小说库.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
