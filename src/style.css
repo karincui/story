@@ -721,6 +721,111 @@ button {
   }
 }
 
+.read-filter {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 3px;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line-soft) 80%, #fff);
+  border: 1px solid var(--line-soft);
+}
+
+.read-filter-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.read-filter-btn.active {
+  background: #fff;
+  color: var(--ink, #1f2937);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  font-weight: 600;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.card-title-row h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.read-badge {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.read-badge.unread {
+  color: #8a3b12;
+  background: #ffe2c8;
+  border-color: #f0b27a;
+  box-shadow: 0 0 0 1px rgba(240, 140, 60, 0.15);
+}
+
+.read-badge.read {
+  color: #4b5563;
+  background: #e8ecef;
+  border-color: #c9d1d8;
+}
+
+.swipe-item.is-unread .swipe-content {
+  background: linear-gradient(180deg, #ffffff 0%, #f7fbfa 100%);
+  border-color: color-mix(in srgb, var(--teal) 28%, var(--line-soft));
+}
+
+.swipe-item.is-unread .swipe-content::before {
+  width: 3px;
+  background: #e07a2f;
+  opacity: 1;
+}
+
+.swipe-item.is-unread .swipe-content h3 {
+  font-weight: 800;
+  color: var(--ink, #1a1f24);
+}
+
+.swipe-item.is-read .swipe-content {
+  background: linear-gradient(180deg, #f4f5f6 0%, #eceef0 100%);
+  border-color: #d7d9de;
+  opacity: 0.88;
+}
+
+.swipe-item.is-read .swipe-content::before {
+  background: #9aa3ad;
+  opacity: 0.55;
+}
+
+.swipe-item.is-read .swipe-content h3 {
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.swipe-item.is-read .by-author {
+  color: #8b949e;
+}
+
 .swipe-item {
   --swipe-actions-w: 96px;
   position: relative;

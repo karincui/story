@@ -12,6 +12,7 @@ const PALETTE = [
 
 const PRESET = {
   未读: 0,
+  已读: 6,
   仙侠: 1,
   玄幻: 4,
   甜宠: 7,

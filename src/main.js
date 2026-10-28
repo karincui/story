@@ -8,6 +8,7 @@ import {
   upsertNovel,
   deleteNovel,
   getNovel,
+  setNovelRead,
   exportMarkdown,
   moveNovelInView,
   refreshStore,
@@ -29,6 +30,8 @@ const state = {
   page: 'library', // library | import | excel | gallery
   query: '',
   filterTags: [],
+  /** all | unread | read */
+  readFilter: 'all',
   tagManage: false,
   sortMode: false,
   editingId: null,
@@ -455,8 +458,14 @@ async function bootStore() {
 }
 
 function renderLibrary() {
-  const novels = searchNovels({ query: state.query, tags: state.filterTags })
+  const novels = searchNovels({
+    query: state.query,
+    tags: state.filterTags,
+    readFilter: state.readFilter,
+  })
   const tags = getAllTags()
+  const readTab = (id, label) =>
+    `<button type="button" class="read-filter-btn ${state.readFilter === id ? 'active' : ''}" data-read-filter="${id}">${label}</button>`
 
   return `
     <div class="layout">
@@ -500,15 +509,20 @@ function renderLibrary() {
         <div class="toolbar">
           <h2>小说库</h2>
           <div class="toolbar-right">
-            <span class="muted">共 ${novels.length} 本想看</span>
+            <span class="muted">共 ${novels.length} 本</span>
             ${
-              novels.length
+              novels.length || state.readFilter !== 'all'
                 ? `<button type="button" class="btn ghost sm ${state.sortMode ? 'active-sort' : ''}" id="toggle-sort-mode">
                     ${state.sortMode ? '完成排序' : '排序'}
                   </button>`
                 : ''
             }
           </div>
+        </div>
+        <div class="read-filter" role="tablist" aria-label="已读筛选">
+          ${readTab('all', '全部')}
+          ${readTab('unread', '未读')}
+          ${readTab('read', '已读')}
         </div>
         ${
           state.sortMode && novels.length
@@ -521,11 +535,25 @@ function renderLibrary() {
                 ${novels.map((n, i) => renderCard(n, i, novels.length)).join('')}
               </div>`
             : `<div class="empty">
-                <h3 class="empty-title">书架还是空的</h3>
-                <p>手动添加一本，或从截图里识别书名。</p>
+                <h3 class="empty-title">${
+                  state.readFilter === 'unread'
+                    ? '没有未读书'
+                    : state.readFilter === 'read'
+                      ? '还没有已读书'
+                      : '书架还是空的'
+                }</h3>
+                <p>${
+                  state.readFilter === 'all'
+                    ? '手动添加一本，或从截图里识别书名。'
+                    : '换个筛选看看，或点卡片上的「未读/已读」切换状态。'
+                }</p>
                 <div class="empty-actions">
-                  <button class="btn" id="add-novel-empty">+ 手动添加一本</button>
-                  <button class="btn ghost" data-nav="import">从截图导入</button>
+                  ${
+                    state.readFilter !== 'all'
+                      ? `<button class="btn ghost" id="clear-read-filter">看全部</button>`
+                      : `<button class="btn" id="add-novel-empty">+ 手动添加一本</button>
+                  <button class="btn ghost" data-nav="import">从截图导入</button>`
+                  }
                 </div>
               </div>`
         }
@@ -542,11 +570,13 @@ function formatAttachSize(n) {
 
 function renderCard(n, index = 0, total = 0) {
   const byline = n.author ? ` <span class="by-author">by${escapeHtml(n.author)}</span>` : ''
+  const isRead = Boolean(n.isRead)
   const isTxt =
     n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime, n.attachmentPath)
   const attach = n.attachmentPath
     ? `<button type="button" class="attach-chip" data-open-attach="${n.id}" title="${escapeHtml(n.attachmentName || '附件')}">${isTxt ? '📖 阅读' : '📎'} ${escapeHtml((n.attachmentName || '附件').slice(0, 14))}${(n.attachmentName || '').length > 14 ? '…' : ''}</button>`
     : ''
+  const statusTags = (n.tags || []).filter((t) => t !== '未读' && t !== '已读')
   const sortControls = state.sortMode
     ? `<div class="sort-controls">
         <button type="button" class="btn ghost sm" data-sort="top" data-sort-id="${n.id}" ${index === 0 ? 'disabled' : ''}>置顶</button>
@@ -555,7 +585,7 @@ function renderCard(n, index = 0, total = 0) {
       </div>`
     : ''
   return `
-    <div class="swipe-item ${state.sortMode ? 'sort-mode' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(index, 8) * 40}ms">
+    <div class="swipe-item ${isRead ? 'is-read' : 'is-unread'} ${state.sortMode ? 'sort-mode' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(index, 8) * 40}ms">
       <div class="swipe-actions">
         <button type="button" class="swipe-btn edit" data-edit="${n.id}" title="编辑" aria-label="编辑">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1 1 0 0 0 0-1.41l-2.51-2.51a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 2z"/></svg>
@@ -566,9 +596,18 @@ function renderCard(n, index = 0, total = 0) {
       </div>
       <div class="swipe-content">
         <div class="card-main">
-          <h3>${escapeHtml(n.title)}${byline}</h3>
+          <div class="card-title-row">
+            <h3>${escapeHtml(n.title)}${byline}</h3>
+            <button
+              type="button"
+              class="read-badge ${isRead ? 'read' : 'unread'}"
+              data-toggle-read="${n.id}"
+              title="${isRead ? '点一下标为未读' : '点一下标为已读'}"
+              aria-pressed="${isRead ? 'true' : 'false'}"
+            >${isRead ? '已读' : '未读'}</button>
+          </div>
           <div class="card-tags">
-            ${(n.tags || []).map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
+            ${statusTags.map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
             ${attach}
           </div>
         </div>
@@ -1527,6 +1566,41 @@ function bindEvents() {
     render()
   })
 
+  app.querySelectorAll('[data-read-filter]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.readFilter = btn.dataset.readFilter || 'all'
+      render()
+    })
+  })
+  app.querySelector('#clear-read-filter')?.addEventListener('click', () => {
+    state.readFilter = 'all'
+    render()
+  })
+
+  app.querySelectorAll('[data-toggle-read]').forEach((btn) => {
+    const stop = (e) => e.stopPropagation()
+    btn.addEventListener('pointerdown', stop)
+    btn.addEventListener('touchstart', stop, { passive: true })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const id = btn.dataset.toggleRead
+        const novel = getNovel(id)
+        if (!novel) return
+        try {
+          await runBusy(novel.isRead ? '标为未读…' : '标为已读…', () =>
+            setNovelRead(id, !novel.isRead),
+          )
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
+      }),
+    )
+  })
+
   app.querySelector('#add-tag')?.addEventListener(
     'click',
     withClickGuard(async () => {
@@ -1562,7 +1636,11 @@ function bindEvents() {
   app.querySelector('#export-md')?.addEventListener(
     'click',
     withClickGuard(() => {
-      const novels = searchNovels({ query: state.query, tags: state.filterTags })
+      const novels = searchNovels({
+        query: state.query,
+        tags: state.filterTags,
+        readFilter: state.readFilter,
+      })
       const md = exportMarkdown(novels)
       const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
       const a = document.createElement('a')

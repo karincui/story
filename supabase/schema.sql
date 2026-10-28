@@ -13,6 +13,7 @@ create table if not exists public.novels (
   attachment_name text,
   attachment_mime text,
   attachment_size bigint,
+  is_read boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -22,6 +23,7 @@ alter table public.novels add column if not exists attachment_path text;
 alter table public.novels add column if not exists attachment_name text;
 alter table public.novels add column if not exists attachment_mime text;
 alter table public.novels add column if not exists attachment_size bigint;
+alter table public.novels add column if not exists is_read boolean not null default false;
 
 create index if not exists novels_user_sort on public.novels (user_id, sort_order);
 

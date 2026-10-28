@@ -2,6 +2,7 @@ import { supabase } from './supabase.js'
 
 export const PRESET_TAGS = [
   '未读',
+  '已读',
   '仙侠',
   '玄幻',
   '甜宠',
@@ -18,19 +19,31 @@ export const PRESET_TAGS = [
 const ATTACH_BUCKET = 'novel-attachments'
 export const ATTACH_MAX_BYTES = 20 * 1024 * 1024
 
-/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
+/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,isRead:boolean,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
 let novelsCache = []
 /** @type {{ customTags: string[], hiddenPresets: string[] }} */
 let prefsCache = { customTags: [], hiddenPresets: [] }
 
+function syncReadTags(tags, isRead) {
+  const next = (tags || []).filter((t) => t !== '未读' && t !== '已读')
+  next.unshift(isRead ? '已读' : '未读')
+  return next
+}
+
 function rowToNovel(row) {
+  const tags = Array.isArray(row.tags) ? row.tags : []
+  const isRead =
+    typeof row.is_read === 'boolean'
+      ? row.is_read
+      : tags.includes('已读') && !tags.includes('未读')
   return {
     id: row.id,
     title: row.title || '',
     author: row.author || '',
     synopsis: row.synopsis || '',
-    tags: Array.isArray(row.tags) ? row.tags : [],
+    tags,
     sortOrder: row.sort_order ?? 0,
+    isRead: Boolean(isRead),
     attachmentPath: row.attachment_path || null,
     attachmentName: row.attachment_name || null,
     attachmentMime: row.attachment_mime || null,
@@ -319,10 +332,35 @@ export function getNovel(id) {
   return novelsCache.find((n) => n.id === id) || null
 }
 
+/** 切换已读 / 未读（同步「已读」「未读」标签） */
+export async function setNovelRead(id, isRead) {
+  const userId = await requireUserId()
+  const existing = novelsCache.find((n) => n.id === id)
+  if (!existing) throw new Error('找不到这本小说')
+  const nextRead = Boolean(isRead)
+  const tags = syncReadTags(existing.tags, nextRead)
+  const { data: row, error } = await supabase
+    .from('novels')
+    .update({
+      is_read: nextRead,
+      tags,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('*')
+    .single()
+  if (error) throw error
+  const novel = rowToNovel(row)
+  novelsCache = novelsCache.map((n) => (n.id === novel.id ? novel : n))
+  return novel
+}
+
 /**
  * @param {object} data
  * @param {File} [data.attachmentFile] 新选的附件
  * @param {boolean} [data.clearAttachment] 清除已有附件
+ * @param {boolean} [data.isRead]
  */
 export async function upsertNovel(data) {
   const userId = await requireUserId()
@@ -330,7 +368,19 @@ export async function upsertNovel(data) {
   const author = (data.author || '').trim()
   if (!title) throw new Error('请填写书名')
 
-  const tags = [...new Set((data.tags || []).map((t) => t.trim()).filter(Boolean))]
+  let tags = [...new Set((data.tags || []).map((t) => t.trim()).filter(Boolean))]
+  const hasReadTag = tags.includes('已读')
+  const hasUnreadTag = tags.includes('未读')
+  let isRead =
+    typeof data.isRead === 'boolean'
+      ? data.isRead
+      : hasReadTag && !hasUnreadTag
+        ? true
+        : false
+  if (hasReadTag && !hasUnreadTag) isRead = true
+  if (hasUnreadTag && !hasReadTag) isRead = false
+  tags = syncReadTags(tags, isRead)
+
   for (const t of tags) {
     if (!PRESET_TAGS.includes(t) && !prefsCache.customTags.includes(t)) {
       prefsCache.customTags = [...prefsCache.customTags, t]
@@ -367,6 +417,7 @@ export async function upsertNovel(data) {
           author,
           synopsis: (data.synopsis || '').trim(),
           tags,
+          is_read: isRead,
           updated_at: nowIso,
           ...attachPatch,
         })
@@ -390,6 +441,7 @@ export async function upsertNovel(data) {
       author,
       synopsis: (data.synopsis || '').trim(),
       tags,
+      is_read: isRead,
       sort_order: maxOrder + 1,
     })
     .select('*')
@@ -427,7 +479,10 @@ export async function deleteNovel(id) {
   if (existing?.attachmentPath) await removeStoragePath(existing.attachmentPath)
 }
 
-export function searchNovels({ query = '', tags = [] } = {}) {
+/**
+ * @param {{ query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read' }} opts
+ */
+export function searchNovels({ query = '', tags = [], readFilter = 'all' } = {}) {
   const q = query.trim().toLowerCase()
   return listNovels().filter((n) => {
     const matchQ =
@@ -438,7 +493,10 @@ export function searchNovels({ query = '', tags = [] } = {}) {
       (n.tags || []).some((t) => t.toLowerCase().includes(q))
     // 未选：不过滤；选 1 个：只保留带该标签；选多个：取交集（须同时含全部所选标签）
     const matchTags = !tags.length || tags.every((t) => (n.tags || []).includes(t))
-    return matchQ && matchTags
+    const matchRead =
+      readFilter === 'all' ||
+      (readFilter === 'read' ? n.isRead : !n.isRead)
+    return matchQ && matchTags && matchRead
   })
 }
 
