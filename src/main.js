@@ -912,24 +912,42 @@ async function applyReaderEncoding(encoding) {
 function bindTxtReader() {
   if (!state.readerOpen) return
   const close = () => {
+    saveReaderProgress()
     state.readerOpen = false
     state.readerText = ''
     state.readerError = ''
     state.readerNovelId = null
     state.readerBuffer = null
     state.readerEncoding = 'auto'
+    state.readerPage = 1
+    state.readerTotalPages = 1
+    state.readerPercent = 0
     render()
   }
   app.querySelector('#reader-close')?.addEventListener('click', close)
+
+  const body = app.querySelector('#reader-body')
+  const refreshPages = () => {
+    requestAnimationFrame(() => updateReaderProgressUi())
+  }
+
+  body?.addEventListener(
+    'scroll',
+    () => {
+      updateReaderProgressUi()
+    },
+    { passive: true },
+  )
+
   app.querySelector('#reader-font-down')?.addEventListener('click', () => {
     state.readerFontSize = Math.max(14, (state.readerFontSize || 18) - 2)
-    const body = app.querySelector('#reader-body')
     if (body) body.style.fontSize = `${state.readerFontSize}px`
+    refreshPages()
   })
   app.querySelector('#reader-font-up')?.addEventListener('click', () => {
     state.readerFontSize = Math.min(28, (state.readerFontSize || 18) + 2)
-    const body = app.querySelector('#reader-body')
     if (body) body.style.fontSize = `${state.readerFontSize}px`
+    refreshPages()
   })
   app.querySelectorAll('[data-reader-enc]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -945,6 +963,15 @@ function bindTxtReader() {
         unmountBusyOverlay()
       }
     })
+  })
+
+  // 恢复阅读位置并刷新页码
+  const saved = loadReaderProgress(state.readerNovelId)
+  requestAnimationFrame(() => {
+    if (body && saved && typeof saved.scrollTop === 'number') {
+      body.scrollTop = saved.scrollTop
+    }
+    updateReaderProgressUi()
   })
 }
 

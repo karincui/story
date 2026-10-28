@@ -964,7 +964,7 @@ button {
   flex: 1;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 16px 16px max(28px, env(safe-area-inset-bottom));
+  padding: 16px 16px 12px;
   line-height: 1.75;
 }
 
@@ -976,6 +976,38 @@ button {
   font-family: var(--font);
   font-size: inherit;
   line-height: inherit;
+}
+
+.reader-progress {
+  flex-shrink: 0;
+  padding: 8px 12px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(42, 36, 28, 0.12);
+  background: color-mix(in srgb, #f7f3ea 94%, #fff);
+}
+
+.reader-progress-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(42, 36, 28, 0.12);
+  overflow: hidden;
+}
+
+.reader-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--teal, #3d7a7a);
+  transition: width 0.12s linear;
+}
+
+.reader-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: rgba(42, 36, 28, 0.65);
+  font-variant-numeric: tabular-nums;
 }
 
 .swipe-hint {
