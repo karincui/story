@@ -121,12 +121,17 @@ export async function downloadAttachmentBlob(path) {
   return data
 }
 
-/** 读取 txt 等文本附件（自动识别 UTF-8 / UTF-16 / GBK，兼容网文与 Safari） */
-export async function fetchAttachmentText(path) {
-  const { decodeTextBuffer } = await import('./decodeText.js')
+/** 下载文本附件原始字节（可本地切换编码，无需重新上传） */
+export async function fetchAttachmentBuffer(path) {
   const blob = await downloadAttachmentBlob(path)
-  const buf = await blob.arrayBuffer()
-  return decodeTextBuffer(buf)
+  return blob.arrayBuffer()
+}
+
+/** 读取 txt 等文本附件（自动识别 UTF-8 / UTF-16 / GBK） */
+export async function fetchAttachmentText(path, encoding = 'auto') {
+  const { decodeTextBuffer } = await import('./decodeText.js')
+  const buf = await fetchAttachmentBuffer(path)
+  return decodeTextBuffer(buf, encoding)
 }
 
 async function requireUserId() {

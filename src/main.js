@@ -13,6 +13,7 @@ import {
   refreshStore,
   getAttachmentSignedUrl,
   fetchAttachmentText,
+  fetchAttachmentBuffer,
   isTextAttachment,
   ATTACH_MAX_BYTES,
 } from './store.js'
@@ -67,6 +68,9 @@ const state = {
   readerText: '',
   readerFontSize: 18,
   readerError: '',
+  readerEncoding: 'auto',
+  /** @type {ArrayBuffer|null} */
+  readerBuffer: null,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -790,6 +794,9 @@ function renderGallery() {
 
 function renderTxtReader() {
   const size = state.readerFontSize || 18
+  const enc = state.readerEncoding || 'auto'
+  const encBtn = (id, label) =>
+    `<button type="button" class="btn ghost sm reader-enc ${enc === id ? 'active' : ''}" data-reader-enc="${id}">${label}</button>`
   return `
     <div class="reader-shell" id="txt-reader" role="dialog" aria-modal="true" aria-label="TXT 阅读器">
       <header class="reader-bar">
@@ -800,6 +807,13 @@ function renderTxtReader() {
           <button type="button" class="btn ghost sm" id="reader-font-up" title="放大字号">A+</button>
         </div>
       </header>
+      <div class="reader-enc-bar">
+        <span class="muted">编码</span>
+        ${encBtn('auto', '自动')}
+        ${encBtn('gbk', 'GBK')}
+        ${encBtn('utf-8', 'UTF-8')}
+        ${encBtn('utf-16le', 'UTF-16')}
+      </div>
       <div class="reader-body" id="reader-body" style="font-size:${size}px">
         ${
           state.readerError
@@ -811,6 +825,17 @@ function renderTxtReader() {
   `
 }
 
+async function applyReaderEncoding(encoding) {
+  if (!state.readerBuffer) return
+  state.readerEncoding = encoding
+  const { decodeTextBuffer } = await import('./decodeText.js')
+  const { text, encoding: used } = decodeTextBuffer(state.readerBuffer, encoding)
+  state.readerText = text || ''
+  state.readerError = text ? '' : '正文为空'
+  if (encoding === 'auto') state.readerEncoding = used || 'auto'
+  render()
+}
+
 function bindTxtReader() {
   if (!state.readerOpen) return
   const close = () => {
@@ -818,6 +843,8 @@ function bindTxtReader() {
     state.readerText = ''
     state.readerError = ''
     state.readerNovelId = null
+    state.readerBuffer = null
+    state.readerEncoding = 'auto'
     render()
   }
   app.querySelector('#reader-close')?.addEventListener('click', close)
@@ -830,6 +857,21 @@ function bindTxtReader() {
     state.readerFontSize = Math.min(28, (state.readerFontSize || 18) + 2)
     const body = app.querySelector('#reader-body')
     if (body) body.style.fontSize = `${state.readerFontSize}px`
+  })
+  app.querySelectorAll('[data-reader-enc]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        state.actionBusyLabel = '切换编码…'
+        state.actionBusy = true
+        mountBusyOverlay()
+        await applyReaderEncoding(btn.dataset.readerEnc)
+      } catch (err) {
+        alert(err.message || String(err))
+      } finally {
+        state.actionBusy = false
+        unmountBusyOverlay()
+      }
+    })
   })
 }
 
@@ -844,7 +886,11 @@ async function openNovelAttachment(novel) {
     state.actionBusy = true
     mountBusyOverlay()
     try {
-      const text = await fetchAttachmentText(novel.attachmentPath)
+      const buf = await fetchAttachmentBuffer(novel.attachmentPath)
+      const { decodeTextBuffer } = await import('./decodeText.js')
+      const { text, encoding } = decodeTextBuffer(buf, 'auto')
+      state.readerBuffer = buf
+      state.readerEncoding = encoding || 'auto'
       state.readerOpen = true
       state.readerNovelId = novel.id
       state.readerTitle = novel.title || novel.attachmentName || '阅读'
@@ -855,6 +901,7 @@ async function openNovelAttachment(novel) {
       state.readerNovelId = novel.id
       state.readerTitle = novel.title || novel.attachmentName || '阅读'
       state.readerText = ''
+      state.readerBuffer = null
       state.readerError = err.message || String(err)
       alert(state.readerError)
     } finally {

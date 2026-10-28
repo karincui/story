@@ -944,6 +944,22 @@ button {
   gap: 4px;
 }
 
+.reader-enc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(42, 36, 28, 0.1);
+  background: color-mix(in srgb, #f7f3ea 96%, #fff);
+}
+
+.reader-enc-bar .reader-enc.active {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+
 .reader-body {
   flex: 1;
   overflow: auto;

@@ -1,24 +1,29 @@
 import iconv from 'iconv-lite'
 import { Buffer } from 'buffer'
 
-/** 统计乱码与汉字比例，分数越高越像正常中文文本 */
+/**
+ * 评分：偏爱「常用汉字 + 中文标点」，惩罚 � 与空字节。
+ * 注意：错误用 GBK/UTF-8 互解也会产出生僻汉字，不能只数 CJK。
+ */
 function scoreDecoded(text) {
   if (!text) return -1e9
-  const sample = text.slice(0, 12000)
-  let bad = 0
-  let cjk = 0
-  let ascii = 0
-  let nulls = 0
-  for (const ch of sample) {
-    const cp = ch.codePointAt(0)
-    if (ch === '\uFFFD') bad += 4
-    else if (cp === 0) nulls += 3
-    else if (cp >= 0x4e00 && cp <= 0x9fff) cjk += 2
-    else if (cp >= 0x3400 && cp <= 0x4dbf) cjk += 2
-    else if ((cp >= 0x20 && cp < 0x7f) || cp === 0x0a || cp === 0x0d || cp === 0x09) ascii += 0.15
-    else if (cp < 32) bad += 1
-  }
-  return cjk + ascii - bad - nulls
+  const sample = text.slice(0, 24000)
+  const fffd = (sample.match(/\uFFFD/g) || []).length
+  const nulls = (sample.match(/\u0000/g) || []).length
+  const common = (sample.match(/[的了是我不在人有他这中大来上个们到说对时着她也会过来你能着上下]/g) || []).length
+  const punct = (sample.match(/[。！？、，：；《》…—\n\r""''「」]/g) || []).length
+  const cjk = (sample.match(/[\u4e00-\u9fff]/g) || []).length
+  const latinJunk = (sample.match(/[A-Za-z]{3,}/g) || []).length
+  const commonRatio = cjk > 0 ? common / cjk : 0
+  return (
+    common * 10 +
+    punct * 6 +
+    cjk * 0.2 +
+    commonRatio * 400 -
+    fffd * 25 -
+    nulls * 20 -
+    latinJunk * 2
+  )
 }
 
 function tryNative(label, bytes) {
@@ -37,36 +42,52 @@ function tryIconv(label, bytes) {
   }
 }
 
-/**
- * 智能解码文本附件：UTF-8 / UTF-16 / GBK / GB18030
- * 网文 txt 在 iPhone Safari 上常需 iconv 的 GBK（原生不支持）
- */
-export function decodeTextBuffer(arrayBuffer) {
-  const bytes = new Uint8Array(arrayBuffer)
-  if (!bytes.length) return ''
-
-  // BOM 优先
+function stripBom(bytes) {
   if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
-    return new TextDecoder('utf-8').decode(bytes.subarray(3))
+    return { encoding: 'utf-8', bytes: bytes.subarray(3) }
   }
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
-    return new TextDecoder('utf-16le').decode(bytes.subarray(2))
+    return { encoding: 'utf-16le', bytes: bytes.subarray(2) }
   }
   if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
-    return new TextDecoder('utf-16be').decode(bytes.subarray(2))
+    return { encoding: 'utf-16be', bytes: bytes.subarray(2) }
+  }
+  return { encoding: null, bytes }
+}
+
+/**
+ * @param {ArrayBuffer} arrayBuffer
+ * @param {'auto'|'utf-8'|'gbk'|'utf-16le'|'utf-16be'} encoding
+ */
+export function decodeTextBuffer(arrayBuffer, encoding = 'auto') {
+  const raw = new Uint8Array(arrayBuffer)
+  if (!raw.length) return { text: '', encoding: encoding === 'auto' ? 'utf-8' : encoding }
+
+  if (encoding === 'utf-8') {
+    const { bytes } = stripBom(raw)
+    return { text: tryNative('utf-8', bytes) || '', encoding: 'utf-8' }
+  }
+  if (encoding === 'gbk') {
+    const text = tryIconv('gb18030', raw) || tryIconv('gbk', raw) || tryNative('gb18030', raw) || tryNative('gbk', raw) || ''
+    return { text, encoding: 'gbk' }
+  }
+  if (encoding === 'utf-16le') {
+    const { bytes } = stripBom(raw)
+    return { text: tryNative('utf-16le', bytes) || '', encoding: 'utf-16le' }
+  }
+  if (encoding === 'utf-16be') {
+    const { bytes } = stripBom(raw)
+    return { text: tryNative('utf-16be', bytes) || '', encoding: 'utf-16be' }
   }
 
-  // 大量 0x00 夹在字节间 → 更像 UTF-16LE
-  let zeroEven = 0
-  let zeroOdd = 0
-  const n = Math.min(bytes.length, 4000)
-  for (let i = 0; i < n; i++) {
-    if (bytes[i] !== 0) continue
-    if (i % 2 === 0) zeroEven++
-    else zeroOdd++
+  // auto
+  const bom = stripBom(raw)
+  if (bom.encoding) {
+    const text = tryNative(bom.encoding, bom.bytes) || ''
+    return { text, encoding: bom.encoding }
   }
-  const utf16Hint = zeroOdd > n * 0.2 || zeroEven > n * 0.2
 
+  const bytes = raw
   const candidates = []
   const push = (label, text) => {
     if (text == null) return
@@ -74,15 +95,15 @@ export function decodeTextBuffer(arrayBuffer) {
   }
 
   push('utf-8', tryNative('utf-8', bytes))
-  if (utf16Hint) {
-    push('utf-16le', tryNative('utf-16le', bytes))
-    push('utf-16be', tryNative('utf-16be', bytes))
-  }
-  push('gb18030-native', tryNative('gb18030', bytes))
-  push('gbk-native', tryNative('gbk', bytes))
-  push('gb18030', tryIconv('gb18030', bytes))
-  push('gbk', tryIconv('gbk', bytes))
+  push('utf-16le', tryNative('utf-16le', bytes))
+  push('utf-16be', tryNative('utf-16be', bytes))
+  push('gb18030', tryIconv('gb18030', bytes) || tryNative('gb18030', bytes))
+  push('gbk', tryIconv('gbk', bytes) || tryNative('gbk', bytes))
 
   candidates.sort((a, b) => b.score - a.score)
-  return candidates[0]?.text ?? new TextDecoder('utf-8').decode(bytes)
+  const best = candidates[0]
+  return {
+    text: best?.text ?? tryNative('utf-8', bytes) ?? '',
+    encoding: best?.label || 'utf-8',
+  }
 }
