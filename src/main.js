@@ -379,7 +379,7 @@ function renderAuth() {
   return `
     <div class="auth-shell">
       <div class="auth-card">
-        <h1 class="brand">书单识图</h1>
+        <h1 class="brand">书单</h1>
         <p class="brand-sub">登录后书单保存在云端，电脑和手机都能用</p>
         <div class="auth-tabs">
           <button type="button" class="auth-tab ${!isRegister ? 'active' : ''}" id="auth-tab-login" ${state.authBusy ? 'disabled' : ''}>登录</button>
