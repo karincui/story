@@ -205,10 +205,29 @@ export async function refreshStore() {
   return listNovels()
 }
 
+const LIBRARY_SORT_PREF_KEY = 'novel-library-sort-pref'
+
+function getLibrarySortPref() {
+  try {
+    const v = localStorage.getItem(LIBRARY_SORT_PREF_KEY)
+    return v === 'manual' ? 'manual' : 'added_desc'
+  } catch {
+    return 'added_desc'
+  }
+}
+
+function setLibrarySortPref(pref) {
+  try {
+    localStorage.setItem(LIBRARY_SORT_PREF_KEY, pref === 'manual' ? 'manual' : 'added_desc')
+  } catch {
+    /* ignore */
+  }
+}
+
 function ensureSortOrdersLocal() {
   const needs = novelsCache.some((n) => typeof n.sortOrder !== 'number')
   if (!needs) return
-  const ranked = [...novelsCache].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  const ranked = [...novelsCache].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
   ranked.forEach((n, i) => {
     if (typeof n.sortOrder !== 'number') n.sortOrder = i
   })
@@ -269,9 +288,16 @@ export function countNovelsWithTag(tag) {
 
 export function listNovels() {
   ensureSortOrdersLocal()
+  // 默认：按添加时间倒序（新加的在最前）；手动点过「排序」后改用 sort_order
+  if (getLibrarySortPref() === 'manual') {
+    return [...novelsCache].sort(
+      (a, b) =>
+        (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (b.createdAt || 0) - (a.createdAt || 0),
+    )
+  }
   return [...novelsCache].sort(
     (a, b) =>
-      (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (b.updatedAt || 0) - (a.updatedAt || 0),
+      (b.createdAt || 0) - (a.createdAt || 0) || (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
   )
 }
 
@@ -325,6 +351,7 @@ export async function moveNovelInView(visibleIds, id, action) {
       })
   })
   await Promise.all(updates)
+  setLibrarySortPref('manual')
   return true
 }
 
@@ -432,7 +459,8 @@ export async function upsertNovel(data) {
     }
   }
 
-  const maxOrder = novelsCache.reduce((m, n) => Math.max(m, n.sortOrder ?? 0), -1)
+  // 新书排到最前（添加倒序）；手动排序模式下也插到第一位
+  const minOrder = novelsCache.reduce((m, n) => Math.min(m, n.sortOrder ?? 0), 0)
   const { data: row, error } = await supabase
     .from('novels')
     .insert({
@@ -442,7 +470,7 @@ export async function upsertNovel(data) {
       synopsis: (data.synopsis || '').trim(),
       tags,
       is_read: isRead,
-      sort_order: maxOrder + 1,
+      sort_order: novelsCache.length ? minOrder - 1 : 0,
     })
     .select('*')
     .single()
