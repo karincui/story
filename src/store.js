@@ -15,7 +15,10 @@ export const PRESET_TAGS = [
   '追更中',
 ]
 
-/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,createdAt:number,updatedAt:number}>} */
+const ATTACH_BUCKET = 'novel-attachments'
+export const ATTACH_MAX_BYTES = 20 * 1024 * 1024
+
+/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
 let novelsCache = []
 /** @type {{ customTags: string[], hiddenPresets: string[] }} */
 let prefsCache = { customTags: [], hiddenPresets: [] }
@@ -28,9 +31,54 @@ function rowToNovel(row) {
     synopsis: row.synopsis || '',
     tags: Array.isArray(row.tags) ? row.tags : [],
     sortOrder: row.sort_order ?? 0,
+    attachmentPath: row.attachment_path || null,
+    attachmentName: row.attachment_name || null,
+    attachmentMime: row.attachment_mime || null,
+    attachmentSize: row.attachment_size ?? null,
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
     updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : Date.now(),
   }
+}
+
+function safeFileName(name) {
+  const base = String(name || 'file')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 80)
+  return base || 'file'
+}
+
+async function removeStoragePath(path) {
+  if (!path) return
+  const { error } = await supabase.storage.from(ATTACH_BUCKET).remove([path])
+  if (error) console.warn('删除附件失败', error.message || error)
+}
+
+async function uploadAttachmentFile(userId, novelId, file) {
+  if (!file) return null
+  if (file.size > ATTACH_MAX_BYTES) {
+    throw new Error('附件不能超过 20MB')
+  }
+  const path = `${userId}/${novelId}/${Date.now()}_${safeFileName(file.name)}`
+  const { error } = await supabase.storage.from(ATTACH_BUCKET).upload(path, file, {
+    upsert: false,
+    contentType: file.type || undefined,
+  })
+  if (error) throw error
+  return {
+    attachment_path: path,
+    attachment_name: file.name || '附件',
+    attachment_mime: file.type || '',
+    attachment_size: file.size || 0,
+  }
+}
+
+/** 获取附件临时下载链接（约 1 小时） */
+export async function getAttachmentSignedUrl(path) {
+  if (!path) throw new Error('没有附件')
+  const { data, error } = await supabase.storage.from(ATTACH_BUCKET).createSignedUrl(path, 3600)
+  if (error) throw error
+  return data.signedUrl
 }
 
 async function requireUserId() {
@@ -218,6 +266,11 @@ export function getNovel(id) {
   return novelsCache.find((n) => n.id === id) || null
 }
 
+/**
+ * @param {object} data
+ * @param {File} [data.attachmentFile] 新选的附件
+ * @param {boolean} [data.clearAttachment] 清除已有附件
+ */
 export async function upsertNovel(data) {
   const userId = await requireUserId()
   const title = (data.title || '').trim()
@@ -234,10 +287,26 @@ export async function upsertNovel(data) {
   await savePrefs()
 
   const nowIso = new Date().toISOString()
+  const file = data.attachmentFile instanceof File ? data.attachmentFile : null
+  const clearAttachment = Boolean(data.clearAttachment) && !file
 
   if (data.id) {
     const existing = novelsCache.find((n) => n.id === data.id)
     if (existing) {
+      let attachPatch = {}
+      if (clearAttachment) {
+        await removeStoragePath(existing.attachmentPath)
+        attachPatch = {
+          attachment_path: null,
+          attachment_name: null,
+          attachment_mime: null,
+          attachment_size: null,
+        }
+      } else if (file) {
+        await removeStoragePath(existing.attachmentPath)
+        attachPatch = await uploadAttachmentFile(userId, data.id, file)
+      }
+
       const { data: row, error } = await supabase
         .from('novels')
         .update({
@@ -246,6 +315,7 @@ export async function upsertNovel(data) {
           synopsis: (data.synopsis || '').trim(),
           tags,
           updated_at: nowIso,
+          ...attachPatch,
         })
         .eq('id', data.id)
         .eq('user_id', userId)
@@ -272,16 +342,36 @@ export async function upsertNovel(data) {
     .select('*')
     .single()
   if (error) throw error
-  const novel = rowToNovel(row)
+
+  let novel = rowToNovel(row)
+  if (file) {
+    try {
+      const attachPatch = await uploadAttachmentFile(userId, novel.id, file)
+      const { data: updated, error: upErr } = await supabase
+        .from('novels')
+        .update({ ...attachPatch, updated_at: new Date().toISOString() })
+        .eq('id', novel.id)
+        .eq('user_id', userId)
+        .select('*')
+        .single()
+      if (upErr) throw upErr
+      novel = rowToNovel(updated)
+    } catch (err) {
+      novelsCache.push(novel)
+      throw new Error(`小说已保存，但附件上传失败：${err.message || err}`)
+    }
+  }
   novelsCache.push(novel)
   return novel
 }
 
 export async function deleteNovel(id) {
   const userId = await requireUserId()
+  const existing = novelsCache.find((n) => n.id === id)
   const { error } = await supabase.from('novels').delete().eq('id', id).eq('user_id', userId)
   if (error) throw error
   novelsCache = novelsCache.filter((n) => n.id !== id)
+  if (existing?.attachmentPath) await removeStoragePath(existing.attachmentPath)
 }
 
 export function searchNovels({ query = '', tags = [] } = {}) {

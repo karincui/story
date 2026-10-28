@@ -11,6 +11,8 @@ import {
   exportMarkdown,
   moveNovelInView,
   refreshStore,
+  getAttachmentSignedUrl,
+  ATTACH_MAX_BYTES,
 } from './store.js'
 import { getSession, signInWithPassword, signUpWithPassword, signOut, onAuthChange } from './auth.js'
 import { migrateLocalIfNeeded } from './migrateLocal.js'
@@ -53,6 +55,9 @@ const state = {
   actionBusyLabel: '',
   storeReady: false,
   storeError: '',
+  /** @type {File|null} */
+  pendingAttachmentFile: null,
+  pendingAttachmentClear: false,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -507,8 +512,17 @@ function renderLibrary() {
   `
 }
 
+function formatAttachSize(n) {
+  if (!n || n < 1024) return `${n || 0} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
 function renderCard(n, index = 0, total = 0) {
   const byline = n.author ? ` <span class="by-author">by${escapeHtml(n.author)}</span>` : ''
+  const attach = n.attachmentPath
+    ? `<button type="button" class="attach-chip" data-open-attach="${n.id}" title="${escapeHtml(n.attachmentName || '附件')}">📎 ${escapeHtml((n.attachmentName || '附件').slice(0, 16))}${(n.attachmentName || '').length > 16 ? '…' : ''}</button>`
+    : ''
   const sortControls = state.sortMode
     ? `<div class="sort-controls">
         <button type="button" class="btn ghost sm" data-sort="top" data-sort-id="${n.id}" ${index === 0 ? 'disabled' : ''}>置顶</button>
@@ -527,6 +541,7 @@ function renderCard(n, index = 0, total = 0) {
           <h3>${escapeHtml(n.title)}${byline}</h3>
           <div class="card-tags">
             ${(n.tags || []).map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
+            ${attach}
           </div>
         </div>
         ${sortControls}
@@ -773,6 +788,30 @@ function renderGalleryLightbox() {
   `
 }
 
+function renderAttachmentField(novel) {
+  const pending = state.pendingAttachmentFile
+  const cleared = state.pendingAttachmentClear
+  const existing = !cleared && novel.attachmentPath ? novel : null
+  let status = '未选择（可选）'
+  if (pending) {
+    status = `待上传：${pending.name}（${formatAttachSize(pending.size)}）`
+  } else if (existing) {
+    status = `已有：${existing.attachmentName || '附件'}${existing.attachmentSize != null ? `（${formatAttachSize(existing.attachmentSize)}）` : ''}`
+  }
+  const canClear = Boolean(pending || existing)
+  return `
+    <div class="field attach-field">
+      <span>附件（选填，最大 20MB）</span>
+      <div class="attach-row">
+        <button type="button" class="btn ghost sm" id="f-attach-pick">选择文件</button>
+        ${canClear ? `<button type="button" class="btn ghost sm" id="f-attach-clear">移除</button>` : ''}
+        <input type="file" id="f-attach-input" hidden />
+      </div>
+      <p class="muted attach-status" id="f-attach-status">${escapeHtml(status)}</p>
+    </div>
+  `
+}
+
 function renderModal() {
   const isNew = state.editingId === 'new'
   const novel = isNew
@@ -788,6 +827,7 @@ function renderModal() {
         <label class="field"><span>书名</span><input id="f-title" value="${escapeHtml(novel.title)}" /></label>
         <label class="field"><span>作者（选填）</span><input id="f-author" value="${escapeHtml(novel.author)}" placeholder="有同名时建议填写" /></label>
         <label class="field"><span>简介</span><textarea id="f-synopsis">${escapeHtml(novel.synopsis || '')}</textarea></label>
+        ${renderAttachmentField(novel)}
         <div class="field">
           <span>标签（可多选，也可新增）</span>
           <div class="tag-picker" id="tag-picker">
@@ -937,6 +977,8 @@ function bindEvents() {
 
   const openAddNovel = withClickGuard(() => {
     state.editingId = 'new'
+    state.pendingAttachmentFile = null
+    state.pendingAttachmentClear = false
     render()
   })
   app.querySelector('#add-novel')?.addEventListener('click', openAddNovel)
@@ -970,7 +1012,28 @@ function bindEvents() {
       withClickGuard((e) => {
         e.stopPropagation()
         state.editingId = btn.dataset.edit
+        state.pendingAttachmentFile = null
+        state.pendingAttachmentClear = false
         render()
+      }),
+    )
+  })
+
+  app.querySelectorAll('[data-open-attach]').forEach((btn) => {
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.stopPropagation()
+        const novel = getNovel(btn.dataset.openAttach)
+        if (!novel?.attachmentPath) return
+        try {
+          await runBusy('打开附件…', async () => {
+            const url = await getAttachmentSignedUrl(novel.attachmentPath)
+            window.open(url, '_blank', 'noopener,noreferrer')
+          })
+        } catch (err) {
+          alert(err.message || String(err))
+        }
       }),
     )
   })
@@ -1348,16 +1411,57 @@ function bindModal() {
     if (el.dataset.toggleTag) selected.add(el.dataset.toggleTag)
   })
 
+  const closeModal = () => {
+    state.editingId = null
+    state.pendingAttachmentFile = null
+    state.pendingAttachmentClear = false
+    render()
+  }
+
   app.querySelector('#modal-backdrop')?.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-backdrop') {
-      state.editingId = null
-      render()
-    }
+    if (e.target.id === 'modal-backdrop') closeModal()
   })
 
-  app.querySelector('#modal-cancel')?.addEventListener('click', () => {
-    state.editingId = null
-    render()
+  app.querySelector('#modal-cancel')?.addEventListener('click', closeModal)
+
+  const attachInput = app.querySelector('#f-attach-input')
+  app.querySelector('#f-attach-pick')?.addEventListener('click', () => attachInput?.click())
+  attachInput?.addEventListener('change', () => {
+    const file = attachInput.files?.[0]
+    attachInput.value = ''
+    if (!file) return
+    if (file.size > ATTACH_MAX_BYTES) {
+      alert('附件不能超过 20MB')
+      return
+    }
+    state.pendingAttachmentFile = file
+    state.pendingAttachmentClear = false
+    const status = app.querySelector('#f-attach-status')
+    if (status) status.textContent = `待上传：${file.name}（${formatAttachSize(file.size)}）`
+    if (!app.querySelector('#f-attach-clear')) {
+      const row = app.querySelector('.attach-row')
+      if (row) {
+        const btn = document.createElement('button')
+        btn.type = 'button'
+        btn.className = 'btn ghost sm'
+        btn.id = 'f-attach-clear'
+        btn.textContent = '移除'
+        row.appendChild(btn)
+        btn.addEventListener('click', () => {
+          state.pendingAttachmentFile = null
+          state.pendingAttachmentClear = true
+          if (status) status.textContent = '未选择（可选）'
+          btn.remove()
+        })
+      }
+    }
+  })
+  app.querySelector('#f-attach-clear')?.addEventListener('click', () => {
+    state.pendingAttachmentFile = null
+    state.pendingAttachmentClear = true
+    const status = app.querySelector('#f-attach-status')
+    if (status) status.textContent = '未选择（可选）'
+    app.querySelector('#f-attach-clear')?.remove()
   })
 
   app.querySelectorAll('[data-toggle-tag]').forEach((btn) => {
@@ -1405,34 +1509,38 @@ function bindModal() {
   app.querySelector('#modal-save')?.addEventListener(
     'click',
     withClickGuard(async () => {
-    const title = app.querySelector('#f-title').value
-    const author = app.querySelector('#f-author').value
-    const synopsis = app.querySelector('#f-synopsis').value
-    const tags = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
-      .map((b) => b.dataset.toggleTag)
-      .filter(Boolean)
-    try {
-      await runBusy('保存中…', async () => {
-        await upsertNovel({
-          id: state.editingId === 'new' ? undefined : state.editingId,
-          title,
-          author,
-          synopsis,
-          tags,
+      const title = app.querySelector('#f-title').value
+      const author = app.querySelector('#f-author').value
+      const synopsis = app.querySelector('#f-synopsis').value
+      const tags = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
+        .map((b) => b.dataset.toggleTag)
+        .filter(Boolean)
+      try {
+        await runBusy('保存中…', async () => {
+          await upsertNovel({
+            id: state.editingId === 'new' ? undefined : state.editingId,
+            title,
+            author,
+            synopsis,
+            tags,
+            attachmentFile: state.pendingAttachmentFile || undefined,
+            clearAttachment: state.pendingAttachmentClear,
+          })
+          state.editingId = null
+          state.pendingAttachmentFile = null
+          state.pendingAttachmentClear = false
         })
-        state.editingId = null
-      })
-      render()
-    } catch (err) {
-      const el = app.querySelector('#form-error')
-      if (el) {
-        el.hidden = false
-        el.textContent = err.message
-      } else {
-        alert(err.message || String(err))
+        render()
+      } catch (err) {
+        const el = app.querySelector('#form-error')
+        if (el) {
+          el.hidden = false
+          el.textContent = err.message
+        } else {
+          alert(err.message || String(err))
+        }
       }
-    }
-  }),
+    }),
   )
 }
 
