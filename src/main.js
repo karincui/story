@@ -7,9 +7,7 @@ import {
   countNovelsWithTag,
   upsertNovel,
   deleteNovel,
-  clearAllNovels,
   getNovel,
-  listNovels,
   setNovelRead,
   exportMarkdown,
   moveNovelInView,
@@ -2649,32 +2647,21 @@ function bindImport() {
   app.querySelector('#add-manual-draft-side')?.addEventListener('click', addManualDraft)
   app.querySelector('#add-manual-draft-empty')?.addEventListener('click', addManualDraft)
 
+  // 只清右侧「待入库预览」，绝不删书架已入库数据
   const clearDraftEntries = withClickGuard(async () => {
-    const draftCount = state.importDrafts.length
-    const shelfCount = listNovels().length
-    if (!draftCount && !shelfCount) {
-      alert('当前没有可清空的条目')
+    if (!state.importDrafts.length) {
+      alert('右侧没有待入库条目')
       return
     }
-    const parts = []
-    if (draftCount) parts.push(`右侧预览 ${draftCount} 条`)
-    if (shelfCount) parts.push(`书架已入库 ${shelfCount} 本`)
     if (
       !(await askConfirm(
-        `确定清空？\n${parts.join('、')}\n\n清空后可重新「生成条目」再入库。此操作不可恢复。`,
+        `确定清空右侧 ${state.importDrafts.length} 条待入库预览？\n（不会删除小说库里已保存的书）`,
       ))
     ) {
       return
     }
-    try {
-      await runBusy('清空中…', async () => {
-        state.importDrafts = []
-        if (shelfCount) await clearAllNovels()
-      })
-      render()
-    } catch (err) {
-      alert(err.message || String(err))
-    }
+    state.importDrafts = []
+    render()
   })
   app.querySelector('#clear-drafts')?.addEventListener('click', clearDraftEntries)
   app.querySelector('#clear-drafts-side')?.addEventListener('click', clearDraftEntries)
