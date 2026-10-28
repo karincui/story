@@ -757,6 +757,7 @@ function renderImport() {
                   <button class="btn" id="parse-ocr" type="button">生成条目</button>
                   <button class="btn ghost" id="clear-drafts" type="button">清空条目</button>
                   <button class="btn ghost" id="clear-ocr" type="button">清空原文</button>
+                  <button class="btn ghost" id="add-manual-draft" type="button">增加条目</button>
                 </div>
               </div>`
             : ''
