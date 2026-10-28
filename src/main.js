@@ -2244,12 +2244,14 @@ function renderCropModal() {
           <p class="muted">拖动选区，拖角缩放；裁掉无关内容再识别更准</p>
         </div>
         <div class="crop-stage" id="crop-stage">
-          <img id="crop-img" class="crop-img" src="${item.preview}" alt="" draggable="false" />
-          <div class="crop-box" id="crop-box" hidden>
-            <span class="crop-handle" data-handle="nw"></span>
-            <span class="crop-handle" data-handle="ne"></span>
-            <span class="crop-handle" data-handle="sw"></span>
-            <span class="crop-handle" data-handle="se"></span>
+          <div class="crop-frame" id="crop-frame">
+            <img id="crop-img" class="crop-img" src="${item.preview}" alt="" draggable="false" />
+            <div class="crop-box" id="crop-box" hidden>
+              <span class="crop-handle" data-handle="nw"></span>
+              <span class="crop-handle" data-handle="ne"></span>
+              <span class="crop-handle" data-handle="sw"></span>
+              <span class="crop-handle" data-handle="se"></span>
+            </div>
           </div>
         </div>
         <div class="crop-modal-actions">

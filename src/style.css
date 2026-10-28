@@ -1566,7 +1566,6 @@ button {
 }
 
 .crop-stage {
-  position: relative;
   flex: 1 1 auto;
   min-height: 220px;
   max-height: min(62vh, 560px);
@@ -1578,11 +1577,19 @@ button {
   overflow: hidden;
   touch-action: none;
   user-select: none;
+  padding: 8px;
+}
+
+.crop-frame {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
 }
 
 .crop-img {
   max-width: 100%;
-  max-height: min(62vh, 560px);
+  max-height: min(58vh, 520px);
   width: auto;
   height: auto;
   display: block;
@@ -1591,6 +1598,8 @@ button {
 
 .crop-box {
   position: absolute;
+  left: 0;
+  top: 0;
   box-sizing: border-box;
   border: 2px solid #fff;
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
