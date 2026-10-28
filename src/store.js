@@ -98,15 +98,19 @@ export async function getAttachmentSignedUrl(path) {
   return data.signedUrl
 }
 
-export function isTextAttachment(name = '', mime = '') {
+export function isTextAttachment(name = '', mime = '', path = '') {
   const n = String(name || '').toLowerCase()
   const m = String(mime || '').toLowerCase()
+  const p = String(path || '').toLowerCase()
   return (
     m.startsWith('text/') ||
     m === 'application/txt' ||
     n.endsWith('.txt') ||
     n.endsWith('.text') ||
-    n.endsWith('.md')
+    n.endsWith('.md') ||
+    p.endsWith('.txt') ||
+    p.endsWith('.text') ||
+    p.endsWith('.md')
   )
 }
 

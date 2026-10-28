@@ -530,7 +530,8 @@ function formatAttachSize(n) {
 
 function renderCard(n, index = 0, total = 0) {
   const byline = n.author ? ` <span class="by-author">by${escapeHtml(n.author)}</span>` : ''
-  const isTxt = n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime)
+  const isTxt =
+    n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime, n.attachmentPath)
   const attach = n.attachmentPath
     ? `<button type="button" class="attach-chip" data-open-attach="${n.id}" title="${escapeHtml(n.attachmentName || '附件')}">${isTxt ? '📖 阅读' : '📎'} ${escapeHtml((n.attachmentName || '附件').slice(0, 14))}${(n.attachmentName || '').length > 14 ? '…' : ''}</button>`
     : ''
@@ -829,29 +830,46 @@ function bindTxtReader() {
 }
 
 async function openNovelAttachment(novel) {
-  if (!novel?.attachmentPath) return
-  if (isTextAttachment(novel.attachmentName, novel.attachmentMime)) {
-    state.readerOpen = true
-    state.readerNovelId = novel.id
-    state.readerTitle = novel.title || novel.attachmentName || '阅读'
-    state.readerText = ''
-    state.readerError = ''
-    render()
+  if (!novel?.attachmentPath) {
+    alert('没有附件')
+    return
+  }
+  const asText = isTextAttachment(novel.attachmentName, novel.attachmentMime, novel.attachmentPath)
+  if (asText) {
     try {
+      let text = ''
       await runBusy('加载正文…', async () => {
-        state.readerText = await fetchAttachmentText(novel.attachmentPath)
+        text = await fetchAttachmentText(novel.attachmentPath)
       })
+      // runBusy 若因忙碌直接 return，text 仍为空，需提示
+      if (!text && !state.actionBusy) {
+        // 可能被防重入吞掉；再试一次直接拉取
+        text = await fetchAttachmentText(novel.attachmentPath)
+      }
+      state.readerOpen = true
+      state.readerNovelId = novel.id
+      state.readerTitle = novel.title || novel.attachmentName || '阅读'
+      state.readerText = text || ''
+      state.readerError = text ? '' : '正文为空或加载失败'
       render()
-      const body = app.querySelector('#reader-body')
-      if (body) body.scrollTop = 0
+      queueMicrotask(() => {
+        const body = app.querySelector('#reader-body')
+        if (body) body.scrollTop = 0
+      })
     } catch (err) {
-      state.readerError = err.message || String(err)
-      render()
+      alert(err.message || String(err))
     }
     return
   }
-  const url = await getAttachmentSignedUrl(novel.attachmentPath)
-  window.open(url, '_blank', 'noopener,noreferrer')
+  try {
+    await runBusy('打开附件…', async () => {
+      const url = await getAttachmentSignedUrl(novel.attachmentPath)
+      const win = window.open(url, '_blank', 'noopener,noreferrer')
+      if (!win) alert('浏览器拦截了新窗口，请允许弹窗后重试')
+    })
+  } catch (err) {
+    alert(err.message || String(err))
+  }
 }
 
 function renderGalleryLightbox() {
@@ -1102,12 +1120,21 @@ function bindEvents() {
   })
 
   app.querySelectorAll('[data-open-attach]').forEach((btn) => {
+    const stop = (e) => {
+      e.stopPropagation()
+    }
+    btn.addEventListener('pointerdown', stop)
+    btn.addEventListener('touchstart', stop, { passive: true })
     btn.addEventListener(
       'click',
       withClickGuard(async (e) => {
+        e.preventDefault()
         e.stopPropagation()
         const novel = getNovel(btn.dataset.openAttach)
-        if (!novel?.attachmentPath) return
+        if (!novel?.attachmentPath) {
+          alert('没有附件路径，请重新上传附件')
+          return
+        }
         try {
           await openNovelAttachment(novel)
         } catch (err) {
@@ -1374,6 +1401,8 @@ function bindSwipe() {
     let moved = false
 
     const getOpenX = () => (item.classList.contains('open') ? swipeOpenX() : 0)
+    const isInteractive = (target) =>
+      Boolean(target?.closest?.('button, a, input, textarea, label, .attach-chip'))
 
     const onStart = (clientX, clientY) => {
       tracking = true
@@ -1441,6 +1470,7 @@ function bindSwipe() {
     content.addEventListener(
       'touchstart',
       (e) => {
+        if (isInteractive(e.target)) return
         const t = e.touches[0]
         onStart(t.clientX, t.clientY)
       },
@@ -1460,6 +1490,7 @@ function bindSwipe() {
     content.addEventListener('pointerdown', (e) => {
       if (e.pointerType === 'touch') return
       if (e.button !== 0) return
+      if (isInteractive(e.target)) return
       onStart(e.clientX, e.clientY)
       content.setPointerCapture?.(e.pointerId)
     })

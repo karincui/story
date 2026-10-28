@@ -873,18 +873,21 @@ button {
 }
 
 .attach-chip {
+  position: relative;
+  z-index: 2;
   border: 1px solid color-mix(in srgb, var(--ink-muted) 35%, transparent);
   background: color-mix(in srgb, var(--surface) 88%, var(--ink-muted));
   color: var(--ink-muted);
   border-radius: 3px;
-  padding: 1px 6px;
-  font-size: 0.68rem;
+  padding: 4px 8px;
+  font-size: 0.72rem;
   line-height: 1.3;
   cursor: pointer;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .attach-chip:hover {
