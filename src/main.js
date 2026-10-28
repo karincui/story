@@ -836,39 +836,46 @@ async function openNovelAttachment(novel) {
   }
   const asText = isTextAttachment(novel.attachmentName, novel.attachmentMime, novel.attachmentPath)
   if (asText) {
+    state.actionBusyLabel = '加载正文…'
+    state.actionBusy = true
+    mountBusyOverlay()
     try {
-      let text = ''
-      await runBusy('加载正文…', async () => {
-        text = await fetchAttachmentText(novel.attachmentPath)
-      })
-      // runBusy 若因忙碌直接 return，text 仍为空，需提示
-      if (!text && !state.actionBusy) {
-        // 可能被防重入吞掉；再试一次直接拉取
-        text = await fetchAttachmentText(novel.attachmentPath)
-      }
+      const text = await fetchAttachmentText(novel.attachmentPath)
       state.readerOpen = true
       state.readerNovelId = novel.id
       state.readerTitle = novel.title || novel.attachmentName || '阅读'
       state.readerText = text || ''
-      state.readerError = text ? '' : '正文为空或加载失败'
+      state.readerError = text ? '' : '正文为空'
+    } catch (err) {
+      state.readerOpen = true
+      state.readerNovelId = novel.id
+      state.readerTitle = novel.title || novel.attachmentName || '阅读'
+      state.readerText = ''
+      state.readerError = err.message || String(err)
+      alert(state.readerError)
+    } finally {
+      state.actionBusy = false
+      unmountBusyOverlay()
       render()
       queueMicrotask(() => {
         const body = app.querySelector('#reader-body')
         if (body) body.scrollTop = 0
       })
-    } catch (err) {
-      alert(err.message || String(err))
     }
     return
   }
+  state.actionBusyLabel = '打开附件…'
+  state.actionBusy = true
+  mountBusyOverlay()
   try {
-    await runBusy('打开附件…', async () => {
-      const url = await getAttachmentSignedUrl(novel.attachmentPath)
-      const win = window.open(url, '_blank', 'noopener,noreferrer')
-      if (!win) alert('浏览器拦截了新窗口，请允许弹窗后重试')
-    })
+    const url = await getAttachmentSignedUrl(novel.attachmentPath)
+    const win = window.open(url, '_blank', 'noopener,noreferrer')
+    if (!win) alert('浏览器拦截了新窗口，请允许弹窗后重试')
   } catch (err) {
     alert(err.message || String(err))
+  } finally {
+    state.actionBusy = false
+    unmountBusyOverlay()
   }
 }
 
