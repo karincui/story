@@ -1650,10 +1650,16 @@ button {
   outline: none;
 }
 
-.raw-ocr-actions {
+.raw-ocr-actions,
+.draft-bulk-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+}
+
+.draft-bulk-actions {
+  margin-top: 14px;
 }
 
 /* Modal */

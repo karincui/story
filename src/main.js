@@ -7,7 +7,9 @@ import {
   countNovelsWithTag,
   upsertNovel,
   deleteNovel,
+  clearAllNovels,
   getNovel,
+  listNovels,
   setNovelRead,
   exportMarkdown,
   moveNovelInView,
@@ -743,6 +745,7 @@ function renderImport() {
                 <textarea id="raw-ocr-text" class="raw-ocr-edit" rows="14">${escapeHtml(rawOcr)}</textarea>
                 <div class="raw-ocr-actions">
                   <button class="btn" id="parse-ocr" type="button">生成条目</button>
+                  <button class="btn ghost" id="clear-drafts" type="button">清空条目</button>
                   <button class="btn ghost" id="clear-ocr" type="button">清空原文</button>
                 </div>
               </div>`
@@ -771,7 +774,10 @@ function renderImport() {
                   )
                   .join('')}
               </div>
-              <button class="btn" id="save-all-drafts" style="margin-top:14px">全部入库</button>`
+              <div class="draft-bulk-actions">
+                <button class="btn" id="save-all-drafts">全部入库</button>
+                <button class="btn ghost" id="clear-drafts-side" type="button">清空条目</button>
+              </div>`
             : `<p class="muted">${
                 rawOcr !== ''
                   ? '左侧核验完原文后，点「生成条目」会出现在这里。'
@@ -2369,6 +2375,36 @@ function bindImport() {
     state.rawOcr = ''
     render()
   })
+
+  const clearDraftEntries = withClickGuard(async () => {
+    const draftCount = state.importDrafts.length
+    const shelfCount = listNovels().length
+    if (!draftCount && !shelfCount) {
+      alert('当前没有可清空的条目')
+      return
+    }
+    const parts = []
+    if (draftCount) parts.push(`右侧预览 ${draftCount} 条`)
+    if (shelfCount) parts.push(`书架已入库 ${shelfCount} 本`)
+    if (
+      !(await askConfirm(
+        `确定清空？\n${parts.join('、')}\n\n清空后可重新「生成条目」再入库。此操作不可恢复。`,
+      ))
+    ) {
+      return
+    }
+    try {
+      await runBusy('清空中…', async () => {
+        state.importDrafts = []
+        if (shelfCount) await clearAllNovels()
+      })
+      render()
+    } catch (err) {
+      alert(err.message || String(err))
+    }
+  })
+  app.querySelector('#clear-drafts')?.addEventListener('click', clearDraftEntries)
+  app.querySelector('#clear-drafts-side')?.addEventListener('click', clearDraftEntries)
 
   app.querySelector('#parse-ocr')?.addEventListener(
     'click',

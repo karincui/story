@@ -507,6 +507,24 @@ export async function deleteNovel(id) {
   if (existing?.attachmentPath) await removeStoragePath(existing.attachmentPath)
 }
 
+/** 清空当前账号下全部小说（含附件），不可恢复 */
+export async function clearAllNovels() {
+  const userId = await requireUserId()
+  const snapshot = [...novelsCache]
+  if (!snapshot.length) return 0
+
+  const paths = snapshot.map((n) => n.attachmentPath).filter(Boolean)
+  const { error } = await supabase.from('novels').delete().eq('user_id', userId)
+  if (error) throw error
+  novelsCache = []
+
+  if (paths.length) {
+    const { error: rmErr } = await supabase.storage.from(ATTACH_BUCKET).remove(paths)
+    if (rmErr) console.warn('清空附件时部分失败', rmErr.message || rmErr)
+  }
+  return snapshot.length
+}
+
 /**
  * @param {{ query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read' }} opts
  */
