@@ -324,7 +324,7 @@ function render() {
           <button class="nav-btn ${state.page === 'library' ? 'active' : ''}" data-nav="library">小说库</button>
           <button class="nav-btn ${state.page === 'import' ? 'active' : ''}" data-nav="import">截图导入</button>
           <button class="nav-btn ${state.page === 'gallery' ? 'active' : ''}" data-nav="gallery">图库</button>
-          <button class="nav-btn ${state.page === 'excel' ? 'active' : ''}" data-nav="excel">Excel</button>
+          <button class="nav-btn ${state.page === 'excel' ? 'active' : ''}" data-nav="excel">表格录入</button>
         </nav>
         <div class="top-actions">
           <button class="btn" id="add-novel-primary" type="button">+ 添加</button>
@@ -690,52 +690,120 @@ function renderCard(n, index = 0, total = 0) {
   `
 }
 
+const SHEET_COLS = ['title', 'author', 'synopsis', 'tags']
+const SHEET_MIN_ROWS = 12
+
+function emptySheetRow() {
+  return { title: '', author: '', synopsis: '', tags: ['未读'] }
+}
+
+function ensureSheetRows(min = SHEET_MIN_ROWS) {
+  if (!Array.isArray(state.excelDrafts)) state.excelDrafts = []
+  while (state.excelDrafts.length < min) state.excelDrafts.push(emptySheetRow())
+}
+
+function sheetTagsText(tags) {
+  return Array.isArray(tags) ? tags.join(',') : String(tags || '')
+}
+
+function parseSheetTags(raw, { fallbackUnread = false } = {}) {
+  const tags = String(raw ?? '')
+    .split(/[,，、;；|/]+/)
+    .map((t) => t.trim())
+    .filter(Boolean)
+  if (tags.length) return tags
+  return fallbackUnread ? ['未读'] : []
+}
+
+function filledSheetCount() {
+  return state.excelDrafts.filter((d) => String(d.title || '').trim()).length
+}
+
+/** 从剪贴板文本解析多行（Excel 复制为 TSV） */
+function parseClipboardSheet(text) {
+  const lines = String(text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .filter((line, i, arr) => line.length > 0 || i < arr.length - 1)
+  while (lines.length && lines[lines.length - 1] === '') lines.pop()
+  return lines.map((line) => {
+    const cols = line.split('\t')
+    // 若粘贴了表头行则跳过语义在调用方处理
+    return {
+      title: (cols[0] || '').trim(),
+      author: (cols[1] || '').trim(),
+      synopsis: (cols[2] || '').trim(),
+      tags: parseSheetTags(cols[3], { fallbackUnread: true }),
+    }
+  })
+}
+
+function looksLikeSheetHeader(row) {
+  const t = normHeader(row.title)
+  return t === '书名' || t === 'title' || t === '名称' || t === '小说名'
+}
+
+function normHeader(s) {
+  return String(s ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+}
+
 function renderExcel() {
+  ensureSheetRows()
   const { excelDrafts, excelInfo, excelImporting } = state
+  const filled = filledSheetCount()
   return `
     <div class="page-head">
-      <h2>Excel 导入</h2>
-      <p class="muted">支持 .xlsx / .xls / .csv · 表头建议含：书名、作者、简介、标签</p>
+      <h2>表格录入</h2>
+      <p class="muted">像 Excel 一样直接填格子；也可从 Excel 复制后粘贴进来 · 支持上传 .xlsx / .csv</p>
     </div>
-    <div class="import-layout">
-      <section class="panel">
-        <h2>上传表格</h2>
-        <p class="muted" style="margin:0 0 12px">标签可用逗号或顿号分隔，如「科幻,未读」</p>
+    <section class="panel sheet-panel">
+      <div class="sheet-toolbar">
         <div class="excel-actions">
+          <button class="btn" id="excel-save-all" type="button" ${excelImporting || !filled ? 'disabled' : ''}>
+            ${excelImporting ? '入库中…' : `全部入库${filled ? `（${filled}）` : ''}`}
+          </button>
+          <button class="btn ghost" id="excel-add-rows" type="button">+ 加 5 行</button>
+          <button class="btn ghost" id="excel-clear" type="button">清空</button>
           <button class="btn ghost" id="excel-template" type="button">下载模板</button>
-          <button class="btn" id="excel-pick" type="button">选择 Excel 文件</button>
+          <button class="btn ghost" id="excel-pick" type="button">上传文件</button>
           <input type="file" id="excel-input" accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" hidden />
         </div>
-        ${excelInfo ? `<p class="muted" style="margin:12px 0 0">${escapeHtml(excelInfo)}</p>` : ''}
-      </section>
-      <section class="panel">
-        <h2>预览并入库 ${excelDrafts.length ? `（${excelDrafts.length} 条）` : ''}</h2>
-        ${
-          excelDrafts.length
-            ? `<div class="draft-list">
-                ${excelDrafts
-                  .map(
-                    (d, i) => `
-                  <div class="draft-item">
-                    <label>书名<input data-ex-title="${i}" value="${escapeHtml(d.title)}" /></label>
-                    <label>作者（选填）<input data-ex-author="${i}" value="${escapeHtml(d.author)}" /></label>
-                    <label>简介<textarea data-ex-synopsis="${i}" rows="2">${escapeHtml(d.synopsis || '')}</textarea></label>
-                    <label>标签<input data-ex-tags="${i}" value="${escapeHtml((d.tags || []).join(','))}" /></label>
-                    <div class="draft-actions">
-                      <button class="btn ghost sm" data-rm-excel="${i}">移除</button>
-                    </div>
-                  </div>`,
-                  )
-                  .join('')}
-              </div>
-              <button class="btn" id="excel-save-all" style="margin-top:14px" ${excelImporting ? 'disabled' : ''}>
-                ${excelImporting ? '入库中…' : '全部入库'}
-              </button>
-              <button class="btn ghost" id="excel-clear" style="margin-top:14px;margin-left:8px">清空预览</button>`
-            : `<p class="muted">选择文件后，这里会列出可编辑的预览。</p>`
-        }
-      </section>
-    </div>
+        ${excelInfo ? `<p class="muted sheet-info">${escapeHtml(excelInfo)}</p>` : `<p class="muted sheet-info">点任意格开始输入；在格子里 Ctrl+V 可粘贴多行</p>`}
+      </div>
+      <div class="sheet-wrap">
+        <table class="sheet-table" id="sheet-table">
+          <thead>
+            <tr>
+              <th class="sheet-num">#</th>
+              <th>书名</th>
+              <th>作者</th>
+              <th>简介</th>
+              <th>标签</th>
+              <th class="sheet-op"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${excelDrafts
+              .map(
+                (d, i) => `
+              <tr data-sheet-row="${i}">
+                <td class="sheet-num">${i + 1}</td>
+                <td><input class="sheet-cell" data-row="${i}" data-ex-title="${i}" data-col="0" value="${escapeHtml(d.title)}" placeholder="必填" /></td>
+                <td><input class="sheet-cell" data-row="${i}" data-ex-author="${i}" data-col="1" value="${escapeHtml(d.author)}" placeholder="选填" /></td>
+                <td><input class="sheet-cell" data-row="${i}" data-ex-synopsis="${i}" data-col="2" value="${escapeHtml(d.synopsis || '')}" placeholder="选填" /></td>
+                <td><input class="sheet-cell" data-row="${i}" data-ex-tags="${i}" data-col="3" value="${escapeHtml(sheetTagsText(d.tags))}" placeholder="未读,科幻" /></td>
+                <td class="sheet-op"><button type="button" class="sheet-rm" data-rm-excel="${i}" title="删除行" aria-label="删除第 ${i + 1} 行">×</button></td>
+              </tr>`,
+              )
+              .join('')}
+          </tbody>
+        </table>
+      </div>
+    </section>
   `
 }
 
@@ -2155,6 +2223,7 @@ function bindGallery() {
 
 function bindExcel() {
   if (state.page !== 'excel') return
+  ensureSheetRows()
 
   app.querySelector('#excel-template')?.addEventListener(
     'click',
@@ -2162,6 +2231,11 @@ function bindExcel() {
       downloadExcelTemplate()
     }),
   )
+
+  app.querySelector('#excel-add-rows')?.addEventListener('click', () => {
+    for (let n = 0; n < 5; n++) state.excelDrafts.push(emptySheetRow())
+    render()
+  })
 
   const input = app.querySelector('#excel-input')
   app.querySelector('#excel-pick')?.addEventListener('click', () => input?.click())
@@ -2172,7 +2246,8 @@ function bindExcel() {
     try {
       await runBusy('读取表格…', async () => {
         const { rows, sheetName, mapping } = await parseExcelFile(file)
-        state.excelDrafts = rows
+        state.excelDrafts = rows.length ? rows : [emptySheetRow()]
+        ensureSheetRows()
         state.excelInfo = `已读取「${file.name}」工作表 ${sheetName} · ${rows.length} 条 · 列映射：书名=${mapping.titleKey}${mapping.authorKey ? `，作者=${mapping.authorKey}` : ''}${mapping.tagsKey ? `，标签=${mapping.tagsKey}` : ''}`
       })
       render()
@@ -2181,47 +2256,135 @@ function bindExcel() {
     }
   })
 
+  const syncSaveBtn = () => {
+    const btn = app.querySelector('#excel-save-all')
+    if (!btn || state.excelImporting) return
+    const n = filledSheetCount()
+    btn.disabled = !n
+    btn.textContent = n ? `全部入库（${n}）` : '全部入库'
+  }
+
   ;['title', 'author', 'synopsis', 'tags'].forEach((key) => {
     app.querySelectorAll(`[data-ex-${key}]`).forEach((el) => {
       el.addEventListener('input', () => {
         const i = Number(el.getAttribute(`data-ex-${key}`))
-        if (Number.isNaN(i)) return
+        if (Number.isNaN(i) || !state.excelDrafts[i]) return
         if (key === 'tags') {
-          state.excelDrafts[i].tags = el.value
-            .split(/[,，]/)
-            .map((t) => t.trim())
-            .filter(Boolean)
+          state.excelDrafts[i].tags = parseSheetTags(el.value)
         } else {
           state.excelDrafts[i][key] = el.value
         }
+        if (key === 'title') syncSaveBtn()
       })
+    })
+  })
+
+  const table = app.querySelector('#sheet-table')
+  table?.addEventListener('keydown', (e) => {
+    const cell = e.target?.closest?.('.sheet-cell')
+    if (!cell) return
+    const row = Number(cell.dataset.row)
+    const col = Number(cell.dataset.col)
+    if (Number.isNaN(row) || Number.isNaN(col)) return
+
+    const focusCell = (r, c) => {
+      const key = SHEET_COLS[c]
+      if (!key) return
+      const next = app.querySelector(`[data-ex-${key}="${r}"]`)
+      next?.focus()
+      next?.select?.()
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      if (row >= state.excelDrafts.length - 1) {
+        state.excelDrafts.push(emptySheetRow())
+        const focusRow = row + 1
+        const focusCol = col
+        render()
+        queueMicrotask(() => focusCell(focusRow, focusCol))
+      } else {
+        focusCell(row + 1, col)
+      }
+    } else if (e.key === 'ArrowDown' && !e.altKey) {
+      e.preventDefault()
+      if (row < state.excelDrafts.length - 1) focusCell(row + 1, col)
+    } else if (e.key === 'ArrowUp' && !e.altKey) {
+      e.preventDefault()
+      if (row > 0) focusCell(row - 1, col)
+    }
+  })
+
+  table?.addEventListener('paste', (e) => {
+    const cell = e.target?.closest?.('.sheet-cell')
+    if (!cell) return
+    const text = e.clipboardData?.getData('text') || ''
+    if (!text.includes('\t') && !text.includes('\n')) return // 单格普通粘贴
+
+    e.preventDefault()
+    let rows = parseClipboardSheet(text)
+    if (rows.length && looksLikeSheetHeader(rows[0])) rows = rows.slice(1)
+    if (!rows.length) return
+
+    const startRow = Number(cell.dataset.row) || 0
+    const startCol = Number(cell.dataset.col) || 0
+
+    // 从当前格起按列偏移写入（支持从中间列粘贴）
+    for (let ri = 0; ri < rows.length; ri++) {
+      const r = startRow + ri
+      while (state.excelDrafts.length <= r) state.excelDrafts.push(emptySheetRow())
+      const src = rows[ri]
+      const vals = [src.title, src.author, src.synopsis, sheetTagsText(src.tags)]
+      for (let ci = 0; ci < vals.length; ci++) {
+        const targetCol = startCol + ci
+        if (targetCol >= SHEET_COLS.length) break
+        const key = SHEET_COLS[targetCol]
+        if (key === 'tags') state.excelDrafts[r].tags = parseSheetTags(vals[ci], { fallbackUnread: true })
+        else state.excelDrafts[r][key] = vals[ci]
+      }
+    }
+    ensureSheetRows()
+    state.excelInfo = `已粘贴 ${rows.length} 行`
+    const focusRow = startRow
+    const focusCol = startCol
+    render()
+    queueMicrotask(() => {
+      const key = SHEET_COLS[focusCol]
+      app.querySelector(`[data-ex-${key}="${focusRow}"]`)?.focus()
     })
   })
 
   app.querySelectorAll('[data-rm-excel]').forEach((btn) => {
     btn.addEventListener('click', () => {
       state.excelDrafts.splice(Number(btn.dataset.rmExcel), 1)
+      ensureSheetRows()
       render()
     })
   })
 
-  app.querySelector('#excel-clear')?.addEventListener('click', () => {
-    state.excelDrafts = []
-    state.excelInfo = ''
-    render()
-  })
+  app.querySelector('#excel-clear')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      if (filledSheetCount() && !(await askConfirm('清空表格里的全部内容？'))) return
+      state.excelDrafts = []
+      ensureSheetRows()
+      state.excelInfo = ''
+      render()
+    }),
+  )
 
   app.querySelector('#excel-save-all')?.addEventListener(
     'click',
     withClickGuard(async () => {
-      if (state.excelImporting || !state.excelDrafts.length) return
+      const toSave = state.excelDrafts.filter((d) => String(d.title || '').trim())
+      if (state.excelImporting || !toSave.length) return
       state.excelImporting = true
       render()
       let ok = 0
       const failed = []
       try {
         await runBusy('入库中…', async () => {
-          for (const d of state.excelDrafts) {
+          for (const d of toSave) {
             try {
               await upsertNovel({
                 title: d.title,
@@ -2234,7 +2397,8 @@ function bindExcel() {
               failed.push(d)
             }
           }
-          state.excelDrafts = failed
+          state.excelDrafts = failed.length ? failed : []
+          ensureSheetRows()
           state.excelInfo = failed.length
             ? `成功 ${ok} 条，失败 ${failed.length} 条（多半缺书名），请改后重试`
             : `成功入库 ${ok} 条`
