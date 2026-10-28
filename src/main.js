@@ -318,7 +318,6 @@ function render() {
       <header class="topbar">
         <div class="brand-block">
           <h1 class="brand">书单</h1>
-          <p class="brand-sub">收藏感兴趣、还没看的小说</p>
         </div>
         <nav class="nav">
           <button class="nav-btn ${state.page === 'library' ? 'active' : ''}" data-nav="library">小说库</button>
