@@ -24,6 +24,7 @@ import { recognizeImages, preloadOcr } from './ocr.js'
 import { parseOcrText } from './parseBooks.js'
 import { tagStyleAttr } from './tagColors.js'
 import { parseExcelFile, downloadExcelTemplate } from './excelImport.js'
+import { parseWishlistMarkdown } from './mdImport.js'
 import { listImages, addImages, getImage, deleteImage, deleteImages } from './imageStore.js'
 import { cropImageToFile } from './cropImage.js'
 
@@ -312,7 +313,13 @@ function render() {
           <button class="nav-btn" id="add-novel" type="button">手动添加</button>
         </nav>
         <div class="top-actions">
-          ${state.page === 'library' ? `<button class="btn ghost" id="export-md">导出 MD</button>` : ''}
+          ${
+            state.page === 'library'
+              ? `<button class="btn ghost" id="export-md">导出 MD</button>
+          <button class="btn ghost" id="import-md" type="button">导入 MD</button>
+          <input type="file" id="import-md-input" accept=".md,text/markdown,text/plain" hidden />`
+              : ''
+          }
           <button class="btn" id="add-novel-primary">+ 添加小说</button>
           <span class="user-chip" title="${escapeHtml(state.user.email || '已登录')}" aria-label="${escapeHtml(state.user.email || '已登录')}">${USER_ICON_SVG}</span>
           <button class="btn ghost" id="sign-out" type="button" title="${escapeHtml(state.user.email || '')}">退出</button>
@@ -1667,6 +1674,61 @@ function bindEvents() {
       URL.revokeObjectURL(a.href)
     }),
   )
+
+  const mdInput = app.querySelector('#import-md-input')
+  app.querySelector('#import-md')?.addEventListener('click', () => mdInput?.click())
+  mdInput?.addEventListener('change', async () => {
+    const file = mdInput.files?.[0]
+    mdInput.value = ''
+    if (!file) return
+    try {
+      await runBusy('读取 MD…', async () => {
+        const text = await file.text()
+        const rows = parseWishlistMarkdown(text)
+        if (!rows.length) throw new Error('没有解析出书目，请确认是本站导出的 MD 格式')
+        const existing = new Set(
+          searchNovels({ readFilter: 'all' }).map((n) => `${n.title}||${n.author || ''}`),
+        )
+        const toAdd = rows.filter((r) => !existing.has(`${r.title}||${r.author || ''}`))
+        const skipped = rows.length - toAdd.length
+        if (!toAdd.length) {
+          alert(`共 ${rows.length} 本，都已在书架上，无需重复导入`)
+          return
+        }
+        if (
+          !(await askConfirm(
+            `将导入 ${toAdd.length} 本到书架${skipped ? `（跳过已有 ${skipped} 本）` : ''}，确定？`,
+          ))
+        ) {
+          return
+        }
+        let ok = 0
+        const failed = []
+        for (const d of toAdd) {
+          try {
+            await upsertNovel({
+              title: d.title,
+              author: d.author,
+              synopsis: d.synopsis,
+              tags: d.tags?.length ? d.tags : ['未读'],
+            })
+            ok += 1
+          } catch (err) {
+            failed.push(`${d.title}：${err.message || err}`)
+          }
+        }
+        await refreshStore()
+        if (failed.length) {
+          alert(`已导入 ${ok} 本，失败 ${failed.length} 本：\n${failed.slice(0, 5).join('\n')}`)
+        } else {
+          alert(`已恢复导入 ${ok} 本`)
+        }
+      })
+      render()
+    } catch (err) {
+      alert(err.message || String(err))
+    }
+  })
 
   app.querySelectorAll('[data-edit]').forEach((btn) => {
     btn.addEventListener(
