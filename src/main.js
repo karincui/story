@@ -1736,7 +1736,7 @@ function renderModal() {
         <p class="error-text" id="form-error" hidden></p>
         <label class="field"><span>书名</span><input id="f-title" value="${escapeHtml(novel.title)}" /></label>
         <label class="field"><span>作者（选填）</span><input id="f-author" value="${escapeHtml(novel.author)}" placeholder="有同名时建议填写" /></label>
-        <label class="field"><span>简介</span><textarea id="f-synopsis" rows="8" placeholder="剧情简介、备注…">${escapeHtml(novel.synopsis || '')}</textarea></label>
+        <label class="field"><span>简介</span><textarea id="f-synopsis" rows="12" placeholder="剧情简介、备注…">${escapeHtml(novel.synopsis || '')}</textarea></label>
         <div class="field">
           <span>评分与标记</span>
           <div class="form-mark-row">
