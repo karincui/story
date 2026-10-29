@@ -895,9 +895,8 @@ button {
   }
 
   .card-title-row {
-    flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: 6px;
   }
 
   .swipe-content h3 {
@@ -905,7 +904,7 @@ button {
     line-height: 1.25;
   }
 
-  .star-btn {
+  .card-rating-row .star-btn {
     font-size: 0.92rem;
   }
 
@@ -1294,7 +1293,10 @@ button {
 .star-row {
   position: relative;
   z-index: 2;
-  margin-top: 2px;
+}
+
+.card-rating-row .star-row {
+  margin-top: 0;
 }
 
 .star,
