@@ -248,6 +248,48 @@ function askConfirm(message) {
   })
 }
 
+/** 轻提示：替代原生 alert，不打断操作 */
+function toast(message, type) {
+  const text = String(message ?? '').trim() || '完成'
+  const kind =
+    type === 'ok' || type === 'error' || type === 'info'
+      ? type
+      : /失败|错误|不能|不足|拦截|为空|未入库|请先|请选择|请允许|请补|请再|找不到|没有读到|没有附件|没有可|空间不足/.test(
+            text,
+          )
+        ? 'error'
+        : /已入库|已全部|已导入|已备份|已从备份|已将本地|成功|同步到云端|都已在书架/.test(text)
+          ? 'ok'
+          : 'info'
+
+  let host = document.getElementById('toast-host')
+  if (!host) {
+    host = document.createElement('div')
+    host.id = 'toast-host'
+    host.className = 'toast-host'
+    host.setAttribute('aria-live', 'polite')
+    document.body.appendChild(host)
+  }
+
+  const el = document.createElement('div')
+  el.className = `toast toast-${kind}`
+  el.setAttribute('role', 'status')
+  el.innerHTML = `<span class="toast-text">${escapeHtml(text)}</span><button type="button" class="toast-close" aria-label="关闭">×</button>`
+
+  const dismiss = () => {
+    el.classList.add('toast-out')
+    window.setTimeout(() => el.remove(), 220)
+  }
+  el.querySelector('.toast-close')?.addEventListener('click', dismiss)
+  el.addEventListener('click', (e) => {
+    if (e.target === el || e.target?.classList?.contains('toast-text')) dismiss()
+  })
+
+  host.appendChild(el)
+  const ms = kind === 'error' ? 4200 : kind === 'ok' ? 2400 : 3000
+  window.setTimeout(dismiss, ms)
+}
+
 function render() {
   const scrollY = window.scrollY
 
@@ -444,7 +486,7 @@ async function bootStore() {
     })
     state.storeReady = true
     if (mig.migrated && mig.count) {
-      queueMicrotask(() => alert(`已将本地 ${mig.count} 本书同步到云端`))
+      queueMicrotask(() => toast(`已将本地 ${mig.count} 本书同步到云端`))
     }
   } catch (err) {
     state.storeError =
@@ -696,7 +738,7 @@ async function runRandomPick({ excludeId = '' } = {}) {
   })
   if (!novel) {
     state.randomNovel = null
-    alert('当前筛选里没有可抽的书')
+    toast('当前筛选里没有可抽的书')
     return null
   }
   rememberNovel(novel)
@@ -1158,7 +1200,7 @@ function saveReaderPref(key, value) {
     else localStorage.removeItem(key)
   } catch (err) {
     if (String(err?.name || err).includes('Quota')) {
-      alert('本地存储空间不足，背景图可能过大，请换一张更小的图')
+      toast('本地存储空间不足，背景图可能过大，请换一张更小的图')
     }
   }
 }
@@ -1286,7 +1328,7 @@ async function compressImageFile(file, maxSide = 1280, quality = 0.72) {
 async function setReaderBgImageFromFile(file) {
   if (!file) return
   if (!file.type.startsWith('image/')) {
-    alert('请选择图片文件')
+    toast('请选择图片文件')
     return
   }
   const dataUrl = await compressImageFile(file)
@@ -1530,7 +1572,7 @@ function bindTxtReader() {
       const clearBtn = app.querySelector('#reader-bg-image-clear')
       if (clearBtn) clearBtn.hidden = !state.readerCustomBgImage
     } catch (err) {
-      alert(err.message || String(err))
+      toast(err.message || String(err))
     } finally {
       state.actionBusy = false
       unmountBusyOverlay()
@@ -1552,7 +1594,7 @@ function bindTxtReader() {
         mountBusyOverlay()
         await applyReaderEncoding(btn.dataset.readerEnc)
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       } finally {
         state.actionBusy = false
         unmountBusyOverlay()
@@ -1572,7 +1614,7 @@ function bindTxtReader() {
 
 async function openNovelAttachment(novel) {
   if (!novel?.attachmentPath) {
-    alert('没有附件')
+    toast('没有附件')
     return
   }
   const asText = isTextAttachment(novel.attachmentName, novel.attachmentMime, novel.attachmentPath)
@@ -1603,7 +1645,7 @@ async function openNovelAttachment(novel) {
       state.readerText = ''
       state.readerBuffer = null
       state.readerError = friendly
-      alert(friendly)
+      toast(friendly)
     } finally {
       state.actionBusy = false
       unmountBusyOverlay()
@@ -1621,9 +1663,9 @@ async function openNovelAttachment(novel) {
   try {
     const url = await getAttachmentSignedUrl(novel.attachmentPath)
     const win = window.open(url, '_blank', 'noopener,noreferrer')
-    if (!win) alert('浏览器拦截了新窗口，请允许弹窗后重试')
+    if (!win) toast('浏览器拦截了新窗口，请允许弹窗后重试')
   } catch (err) {
-    alert(err.message || String(err))
+    toast(err.message || String(err))
   } finally {
     state.actionBusy = false
     unmountBusyOverlay()
@@ -1824,7 +1866,7 @@ function bindTagDragReorder() {
           await runBusy('保存排序…', () => reorderTags(nextOrder))
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
           render()
         }
       }
@@ -1863,7 +1905,7 @@ function bindEvents() {
             again.setSelectionRange(sel, sel)
           }
         })
-        .catch((err) => alert(err.message || String(err)))
+        .catch((err) => toast(err.message || String(err)))
     }, 320)
     search.addEventListener('input', onSearch)
   }
@@ -1915,7 +1957,7 @@ function bindEvents() {
         )
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -1927,7 +1969,7 @@ function bindEvents() {
         await runBusy('抽一本…', () => runRandomPick())
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -1942,7 +1984,7 @@ function bindEvents() {
         render()
         window.scrollTo(0, 0)
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -1956,7 +1998,7 @@ function bindEvents() {
         render()
         window.scrollTo(0, 0)
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -1973,7 +2015,7 @@ function bindEvents() {
           const moved = await runBusy('排序中…', () => moveNovelInView(visibleIds, id, action))
           if (moved) render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -1993,7 +2035,7 @@ function bindEvents() {
           await runBusy('筛选中…', () => reloadLibrary(1))
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2025,7 +2067,7 @@ function bindEvents() {
           })
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2041,7 +2083,7 @@ function bindEvents() {
         await runBusy('清除筛选…', () => reloadLibrary(1))
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -2055,7 +2097,7 @@ function bindEvents() {
           await runBusy('筛选中…', () => reloadLibrary(1))
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2070,7 +2112,7 @@ function bindEvents() {
         await runBusy('加载书单…', () => reloadLibrary(1))
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -2094,7 +2136,7 @@ function bindEvents() {
           })
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2119,7 +2161,7 @@ function bindEvents() {
           })
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2143,7 +2185,7 @@ function bindEvents() {
           })
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2158,7 +2200,7 @@ function bindEvents() {
           await runBusy('添加标签…', () => addCustomTag(name.trim()))
           render()
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }
     }),
@@ -2212,14 +2254,14 @@ function bindEvents() {
       try {
         const result = await runBusy('备份中…', () => backupNovelsToBeifen())
         if (result.wroteLocal) {
-          alert(`已备份 ${result.count} 本到项目里的 beifen.md，并下载了一份副本`)
+          toast(`已备份 ${result.count} 本到项目里的 beifen.md，并下载了一份副本`)
         } else {
-          alert(
+          toast(
             `已下载 beifen.md（${result.count} 本）。\n请把它保存/覆盖到：\n小说test\\novel-app\\beifen.md\n\n（本地 npm run dev 时会自动写入该文件）`,
           )
         }
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -2241,12 +2283,12 @@ function bindEvents() {
           text = await pickBeifenFile()
         }
         if (!text?.trim()) {
-          alert('没有读到备份内容')
+          toast('没有读到备份内容')
           return
         }
         const plan = planRestoreFromMarkdown(text)
         if (!plan.toAdd.length) {
-          alert(`备份共 ${plan.total} 本，都已在书架上`)
+          toast(`备份共 ${plan.total} 本，都已在书架上`)
           return
         }
         if (
@@ -2267,15 +2309,15 @@ function bindEvents() {
           }),
         )
         if (result.failed.length) {
-          alert(
+          toast(
             `已恢复 ${result.ok} 本，失败 ${result.failed.length} 本：\n${result.failed.slice(0, 5).join('\n')}`,
           )
         } else {
-          alert(`已从备份恢复 ${result.ok} 本${plan.skipped ? `（跳过已有 ${plan.skipped}）` : ''}`)
+          toast(`已从备份恢复 ${result.ok} 本${plan.skipped ? `（跳过已有 ${plan.skipped}）` : ''}`)
         }
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -2319,13 +2361,13 @@ function bindEvents() {
         e.stopPropagation()
         const novel = getNovel(btn.dataset.openAttach)
         if (!novel?.attachmentPath) {
-          alert('没有附件路径，请重新上传附件')
+          toast('没有附件路径，请重新上传附件')
           return
         }
         try {
           await openNovelAttachment(novel)
         } catch (err) {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }),
     )
@@ -2344,7 +2386,7 @@ function bindEvents() {
             })
             render()
           } catch (err) {
-            alert(err.message || String(err))
+            toast(err.message || String(err))
           }
         }
       }),
@@ -2392,7 +2434,7 @@ function bindViewModal() {
       try {
         await openNovelAttachment(novel)
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -2420,7 +2462,7 @@ function bindRandomModal() {
         )
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -2446,7 +2488,7 @@ function bindRandomModal() {
         state.randomNovel = null
         await openNovelAttachment(n)
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
         render()
       }
     }),
@@ -2484,7 +2526,7 @@ function bindExcel() {
       })
       render()
     } catch (err) {
-      alert(err.message || String(err))
+      toast(err.message || String(err))
     }
   })
 
@@ -2639,8 +2681,8 @@ function bindExcel() {
       } finally {
         state.excelImporting = false
       }
-      if (!failed.length) alert(`已导入 ${ok} 本小说`)
-      else alert(`成功 ${ok} 条，还有 ${failed.length} 条未入库`)
+      if (!failed.length) toast(`已导入 ${ok} 本小说`)
+      else toast(`成功 ${ok} 条，还有 ${failed.length} 条未入库`)
       render()
     }),
   )
@@ -2828,7 +2870,7 @@ function bindModal() {
     attachInput.value = ''
     if (!file) return
     if (file.size > ATTACH_MAX_BYTES) {
-      alert('附件不能超过 20MB')
+      toast('附件不能超过 20MB')
       return
     }
     state.pendingAttachmentFile = file
@@ -2915,7 +2957,7 @@ function bindModal() {
     try {
       await runBusy('添加标签…', () => addCustomTag(name.trim()))
     } catch (err) {
-      alert(err.message || String(err))
+      toast(err.message || String(err))
       return
     }
     // Re-open modal keeping fields
@@ -2989,7 +3031,7 @@ function bindModal() {
           el.hidden = false
           el.textContent = err.message
         } else {
-          alert(err.message || String(err))
+          toast(err.message || String(err))
         }
       }
     }),
@@ -3134,7 +3176,7 @@ function bindCropModal() {
         cropSession = null
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -3215,7 +3257,7 @@ function bindImport() {
         if (!state.batchTags.includes(t)) state.batchTags = [...state.batchTags, t]
         render()
       } catch (err) {
-        alert(err.message || String(err))
+        toast(err.message || String(err))
       }
     }),
   )
@@ -3287,7 +3329,7 @@ function bindImport() {
     withClickGuard(async () => {
       const text = (app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr ?? '').trim()
       if (!text) {
-        alert('还没有可复制的文字，请先识别')
+        toast('还没有可复制的文字，请先识别')
         return
       }
       try {
@@ -3307,7 +3349,7 @@ function bindImport() {
         state.importMsg = '已复制识别文字'
         render()
       } catch (err) {
-        alert(`复制失败：${err.message || err}`)
+        toast(`复制失败：${err.message || err}`)
       }
     }),
   )
@@ -3368,7 +3410,7 @@ function bindImport() {
           state.importDrafts = []
         })
       } catch (err) {
-        alert(`识别失败：${err.message || err}`)
+        toast(`识别失败：${err.message || err}`)
       } finally {
         state.recognizing = false
         render()
@@ -3404,7 +3446,7 @@ function bindImport() {
   // 只清右侧「待入库预览」，绝不删书架已入库数据
   const clearDraftEntries = withClickGuard(async () => {
     if (!state.importDrafts.length) {
-      alert('右侧没有待入库条目')
+      toast('右侧没有待入库条目')
       return
     }
     if (
@@ -3428,12 +3470,12 @@ function bindImport() {
         .trim()
       state.rawOcr = app.querySelector('#raw-ocr-text')?.value ?? state.rawOcr
       if (!text) {
-        alert('原文为空，请先识别或粘贴文本')
+        toast('原文为空，请先识别或粘贴文本')
         return
       }
       const parsed = parseOcrText(text)
       if (!parsed.length) {
-        alert('没解析出书名，请再改改原文后重试')
+        toast('没解析出书名，请再改改原文后重试')
         return
       }
       state.importDrafts = parsed.map((p) => ({
@@ -3490,10 +3532,10 @@ function bindImport() {
             await saveOne(i)
             state.importDrafts.splice(i, 1)
           })
-          alert('已入库')
+          toast('已入库')
           render()
         } catch (err) {
-          alert(err.message)
+          toast(err.message)
         }
       }),
     )
@@ -3517,11 +3559,11 @@ function bindImport() {
           state.importDrafts = remaining
           if (!failed) state.page = 'library'
         })
-        if (failed) alert(`有 ${failed} 条未入库（多半缺书名），请补全后重试`)
-        else alert('已全部入库')
+        if (failed) toast(`有 ${failed} 条未入库（多半缺书名），请补全后重试`)
+        else toast('已全部入库')
         render()
       } catch (err) {
-        alert(err.message)
+        toast(err.message)
       }
     }),
   )
