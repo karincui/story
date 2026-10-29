@@ -37,8 +37,12 @@ create table if not exists public.user_prefs (
   user_id uuid primary key references auth.users(id) on delete cascade,
   custom_tags text[] not null default '{}',
   hidden_presets text[] not null default '{}',
+  tag_order text[] not null default '{}',
   updated_at timestamptz not null default now()
 );
+
+-- 已有库补字段（可重复执行）
+alter table public.user_prefs add column if not exists tag_order text[] not null default '{}';
 
 alter table public.novels enable row level security;
 alter table public.user_prefs enable row level security;

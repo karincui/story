@@ -22,8 +22,8 @@ export const ATTACH_MAX_BYTES = 20 * 1024 * 1024
 
 /** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,isRead:boolean,wantToRead:boolean,rating:number,review:string,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
 let novelsCache = []
-/** @type {{ customTags: string[], hiddenPresets: string[] }} */
-let prefsCache = { customTags: [], hiddenPresets: [] }
+/** @type {{ customTags: string[], hiddenPresets: string[], tagOrder: string[] }} */
+let prefsCache = { customTags: [], hiddenPresets: [], tagOrder: [] }
 
 function syncReadTags(tags, isRead) {
   const next = (tags || []).filter((t) => t !== '未读' && t !== '已读')
@@ -167,7 +167,7 @@ async function requireUserId() {
 async function ensurePrefs(userId) {
   const { data, error } = await supabase
     .from('user_prefs')
-    .select('custom_tags, hidden_presets')
+    .select('custom_tags, hidden_presets, tag_order')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) throw error
@@ -175,6 +175,7 @@ async function ensurePrefs(userId) {
     prefsCache = {
       customTags: data.custom_tags || [],
       hiddenPresets: data.hidden_presets || [],
+      tagOrder: Array.isArray(data.tag_order) ? data.tag_order : [],
     }
     return
   }
@@ -182,9 +183,10 @@ async function ensurePrefs(userId) {
     user_id: userId,
     custom_tags: [],
     hidden_presets: [],
+    tag_order: [],
   })
   if (insertErr) throw insertErr
-  prefsCache = { customTags: [], hiddenPresets: [] }
+  prefsCache = { customTags: [], hiddenPresets: [], tagOrder: [] }
 }
 
 async function savePrefs() {
@@ -193,6 +195,7 @@ async function savePrefs() {
     user_id: userId,
     custom_tags: prefsCache.customTags,
     hidden_presets: prefsCache.hiddenPresets,
+    tag_order: prefsCache.tagOrder || [],
     updated_at: new Date().toISOString(),
   })
   if (error) throw error
@@ -418,7 +421,36 @@ export function getAllTags() {
     ...novelTagsCache,
     ...novelsCache.flatMap((n) => n.tags || []),
   ]
-  return [...new Set([...presets, ...prefsCache.customTags, ...fromNovels])]
+  const all = [...new Set([...presets, ...prefsCache.customTags, ...fromNovels])]
+  const order = Array.isArray(prefsCache.tagOrder) ? prefsCache.tagOrder : []
+  if (!order.length) return all
+  const set = new Set(all)
+  const ordered = []
+  for (const t of order) {
+    if (set.has(t)) {
+      ordered.push(t)
+      set.delete(t)
+    }
+  }
+  for (const t of all) {
+    if (set.has(t)) ordered.push(t)
+  }
+  return ordered
+}
+
+export async function reorderTags(orderedNames) {
+  const names = (orderedNames || []).map((t) => String(t || '').trim()).filter(Boolean)
+  const current = new Set(getAllTags())
+  const next = []
+  for (const t of names) {
+    if (current.has(t) && !next.includes(t)) next.push(t)
+  }
+  for (const t of current) {
+    if (!next.includes(t)) next.push(t)
+  }
+  prefsCache.tagOrder = next
+  await savePrefs()
+  return getAllTags()
 }
 
 export async function addCustomTag(tag) {
@@ -428,6 +460,9 @@ export async function addCustomTag(tag) {
   if (![...PRESET_TAGS, ...prefsCache.customTags].includes(t)) {
     prefsCache.customTags = [...prefsCache.customTags, t]
   }
+  if (!prefsCache.tagOrder.includes(t)) {
+    prefsCache.tagOrder = [...prefsCache.tagOrder, t]
+  }
   await savePrefs()
   return getAllTags()
 }
@@ -436,6 +471,7 @@ export async function deleteTag(tag) {
   const t = String(tag || '').trim()
   if (!t) return { removedFromNovels: 0 }
   prefsCache.customTags = prefsCache.customTags.filter((x) => x !== t)
+  prefsCache.tagOrder = (prefsCache.tagOrder || []).filter((x) => x !== t)
   if (PRESET_TAGS.includes(t)) {
     if (!prefsCache.hiddenPresets.includes(t)) {
       prefsCache.hiddenPresets = [...prefsCache.hiddenPresets, t]
@@ -664,6 +700,9 @@ export async function upsertNovel(data) {
     if (!PRESET_TAGS.includes(t) && !prefsCache.customTags.includes(t)) {
       prefsCache.customTags = [...prefsCache.customTags, t]
     }
+    if (!(prefsCache.tagOrder || []).includes(t)) {
+      prefsCache.tagOrder = [...(prefsCache.tagOrder || []), t]
+    }
   }
   prefsCache.hiddenPresets = prefsCache.hiddenPresets.filter((x) => !tags.includes(x))
   await savePrefs()
@@ -866,10 +905,11 @@ export async function bulkInsertNovels(items) {
   return added.length
 }
 
-export async function replacePrefsFromLocal({ customTags = [], hiddenPresets = [] } = {}) {
+export async function replacePrefsFromLocal({ customTags = [], hiddenPresets = [], tagOrder = [] } = {}) {
   prefsCache = {
     customTags: [...new Set(customTags.map((t) => String(t).trim()).filter(Boolean))],
     hiddenPresets: [...new Set(hiddenPresets.map((t) => String(t).trim()).filter(Boolean))],
+    tagOrder: [...new Set((tagOrder || []).map((t) => String(t).trim()).filter(Boolean))],
   }
   await savePrefs()
 }

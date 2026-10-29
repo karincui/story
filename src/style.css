@@ -670,12 +670,52 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  padding-left: 2px;
   padding-right: 2px;
   cursor: default;
+  user-select: none;
 }
 
 .tag-chip.manage .tag-chip-label {
   padding: 0 2px;
+}
+
+.tag-chip.manage.dragging {
+  opacity: 0.5;
+}
+
+.tag-chip.manage.drop-before {
+  box-shadow: inset 2px 0 0 var(--tag-fg);
+}
+
+.tag-chip.manage.drop-after {
+  box-shadow: inset -2px 0 0 var(--tag-fg);
+}
+
+.tag-drag-handle {
+  border: none;
+  background: transparent;
+  color: var(--tag-fg);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  line-height: 1;
+  font-size: 0.7rem;
+  letter-spacing: -0.12em;
+  cursor: grab;
+  opacity: 0.7;
+  padding: 0;
+  touch-action: none;
+}
+
+.tag-drag-handle:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--tag-fg) 16%, transparent);
+}
+
+.tag-drag-handle:active,
+.tag-chip.manage.dragging .tag-drag-handle {
+  cursor: grabbing;
 }
 
 .tag-del {

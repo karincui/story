@@ -4,6 +4,7 @@ import {
   getAllTags,
   addCustomTag,
   deleteTag,
+  reorderTags,
   countNovelsWithTag,
   upsertNovel,
   deleteNovel,
@@ -498,14 +499,15 @@ function renderLibrary() {
           tagsOpen
             ? `${
                 state.tagManage
-                  ? `<p class="muted tag-manage-hint">点 × 删除标签；会从所有小说上移除该标签</p>`
+                  ? `<p class="muted tag-manage-hint">拖动手柄排序；点 × 删除（会从所有小说上移除）</p>`
                   : ''
               }
-        <div class="tag-list ${state.tagManage ? 'managing' : ''}">
+        <div class="tag-list ${state.tagManage ? 'managing' : ''}" id="tag-list">
           ${tags
             .map((t) =>
               state.tagManage
-                ? `<span class="tag-chip manage" ${tagStyleAttr(t)}>
+                ? `<span class="tag-chip manage" data-tag-name="${escapeHtml(t)}" ${tagStyleAttr(t)}>
+                    <button type="button" class="tag-drag-handle" data-tag-drag="${escapeHtml(t)}" title="拖动排序" aria-label="拖动 ${escapeHtml(t)}">⋮⋮</button>
                     <span class="tag-chip-label">${escapeHtml(t)}</span>
                     <button type="button" class="tag-del" data-del-tag="${escapeHtml(t)}" title="删除标签" aria-label="删除 ${escapeHtml(t)}">×</button>
                   </span>`
@@ -1759,6 +1761,81 @@ function renderModal() {
   `
 }
 
+/** 标签管理：按手柄拖拽排序（pointer 事件，适配触控） */
+function bindTagDragReorder() {
+  const list = app.querySelector('#tag-list')
+  if (!list || !list.classList.contains('managing')) return
+
+  const manageChips = () => [...list.querySelectorAll('.tag-chip.manage')]
+
+  list.querySelectorAll('[data-tag-drag]').forEach((handle) => {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      const chip = handle.closest('.tag-chip.manage')
+      if (!chip) return
+
+      const startOrder = manageChips().map((c) => c.dataset.tagName)
+      chip.classList.add('dragging')
+      handle.setPointerCapture(e.pointerId)
+
+      const clearIndicators = () => {
+        manageChips().forEach((c) => c.classList.remove('drop-before', 'drop-after'))
+      }
+
+      const onMove = (ev) => {
+        const el = document.elementFromPoint(ev.clientX, ev.clientY)
+        const over = el?.closest?.('.tag-chip.manage')
+        clearIndicators()
+        if (!over || over === chip || !list.contains(over)) return
+        const rect = over.getBoundingClientRect()
+        const before = ev.clientX < rect.left + rect.width / 2
+        over.classList.add(before ? 'drop-before' : 'drop-after')
+      }
+
+      const finish = async () => {
+        handle.removeEventListener('pointermove', onMove)
+        handle.removeEventListener('pointerup', finish)
+        handle.removeEventListener('pointercancel', finish)
+        try {
+          handle.releasePointerCapture(e.pointerId)
+        } catch {
+          /* ignore */
+        }
+
+        const dropTarget = list.querySelector('.tag-chip.manage.drop-before, .tag-chip.manage.drop-after')
+        const insertBefore = dropTarget?.classList.contains('drop-before')
+        clearIndicators()
+        chip.classList.remove('dragging')
+
+        if (!dropTarget || dropTarget === chip) return
+
+        if (insertBefore) list.insertBefore(chip, dropTarget)
+        else list.insertBefore(chip, dropTarget.nextSibling)
+
+        const addBtn = list.querySelector('#add-tag')
+        if (addBtn) list.appendChild(addBtn)
+
+        const nextOrder = manageChips().map((c) => c.dataset.tagName)
+        if (nextOrder.join('\0') === startOrder.join('\0')) return
+
+        try {
+          await runBusy('保存排序…', () => reorderTags(nextOrder))
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+          render()
+        }
+      }
+
+      handle.addEventListener('pointermove', onMove)
+      handle.addEventListener('pointerup', finish)
+      handle.addEventListener('pointercancel', finish)
+    })
+  })
+}
+
 function bindEvents() {
   app.querySelectorAll('[data-nav]').forEach((btn) => {
     btn.addEventListener(
@@ -1953,6 +2030,8 @@ function bindEvents() {
       }),
     )
   })
+
+  bindTagDragReorder()
 
   app.querySelector('#clear-filters')?.addEventListener(
     'click',
