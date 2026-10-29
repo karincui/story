@@ -1816,16 +1816,19 @@ function renderModal() {
         <label class="field"><span>作者（选填）</span><input id="f-author" value="${escapeHtml(novel.author)}" placeholder="有同名时建议填写" /></label>
         <label class="field"><span>简介</span><textarea id="f-synopsis" rows="8" placeholder="剧情简介、备注…">${escapeHtml(novel.synopsis || '')}</textarea></label>
         <div class="field">
-          <span>评分</span>
-          ${renderStars(novel.rating || 0, { interactive: true, inputId: 'f-rating' })}
+          <span>评分与标记</span>
+          <div class="form-mark-row">
+            ${renderStars(novel.rating || 0, { interactive: true, inputId: 'f-rating' })}
+            <button
+              type="button"
+              class="want-chip form-want ${novel.wantToRead ? 'on' : ''}"
+              id="f-want"
+              aria-pressed="${novel.wantToRead ? 'true' : 'false'}"
+              title="标为很想看"
+            >${novel.wantToRead ? '★ 很想看' : '☆ 很想看'}</button>
+          </div>
         </div>
         <label class="field"><span>评价</span><textarea id="f-review" rows="6" placeholder="写几句观感…">${escapeHtml(novel.review || '')}</textarea></label>
-        <label class="field want-field">
-          <span class="want-check-row">
-            <input type="checkbox" id="f-want" ${novel.wantToRead ? 'checked' : ''} />
-            很想看
-          </span>
-        </label>
         ${renderAttachmentField(novel)}
         <div class="field">
           <span>标签（可多选，也可新增）</span>
@@ -3020,6 +3023,20 @@ function bindModal() {
     })
   })
 
+  const paintFormWant = (on) => {
+    const btn = app.querySelector('#f-want')
+    if (!btn) return
+    const next = Boolean(on)
+    btn.classList.toggle('on', next)
+    btn.setAttribute('aria-pressed', next ? 'true' : 'false')
+    btn.textContent = next ? '★ 很想看' : '☆ 很想看'
+  }
+
+  app.querySelector('#f-want')?.addEventListener('click', () => {
+    const btn = app.querySelector('#f-want')
+    paintFormWant(btn?.getAttribute('aria-pressed') !== 'true')
+  })
+
   app.querySelector('#modal-add-tag')?.addEventListener(
     'click',
     withClickGuard(async () => {
@@ -3037,6 +3054,7 @@ function bindModal() {
     const synopsis = app.querySelector('#f-synopsis')?.value
     const review = app.querySelector('#f-review')?.value
     const rating = clampRating(app.querySelector('#f-rating')?.dataset.rating)
+    const wantOn = app.querySelector('#f-want')?.getAttribute('aria-pressed') === 'true'
     const active = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
       .map((b) => b.dataset.toggleTag)
       .filter(Boolean)
@@ -3053,6 +3071,7 @@ function bindModal() {
       if (s) s.value = synopsis
       if (rv) rv.value = review
       paintFormStars(rating)
+      paintFormWant(wantOn)
       app.querySelectorAll('[data-toggle-tag]').forEach((b) => {
         if (active.includes(b.dataset.toggleTag)) b.classList.add('active')
         else b.classList.remove('active')
@@ -3069,7 +3088,7 @@ function bindModal() {
       const synopsis = app.querySelector('#f-synopsis').value
       const review = app.querySelector('#f-review')?.value || ''
       const rating = clampRating(app.querySelector('#f-rating')?.dataset.rating)
-      const wantToRead = Boolean(app.querySelector('#f-want')?.checked)
+      const wantToRead = app.querySelector('#f-want')?.getAttribute('aria-pressed') === 'true'
       const tags = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
         .map((b) => b.dataset.toggleTag)
         .filter(Boolean)
