@@ -771,8 +771,8 @@ button {
   font-size: 0.9rem;
 }
 
-.random-modal .star-row {
-  margin: 0 0 10px;
+.random-status-row {
+  margin-bottom: 10px;
 }
 
 .random-modal .star-row .star {
@@ -784,21 +784,10 @@ button {
   padding-left: 0;
 }
 
-.random-review {
-  margin: 0 0 8px;
-  font-size: 0.92rem;
-  line-height: 1.45;
-  color: var(--ink);
-}
-
-.random-synopsis {
+.random-empty-meta,
+.random-attach {
   margin: 0 0 8px;
   font-size: 0.82rem;
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
 }
 
 .random-filter-note {
