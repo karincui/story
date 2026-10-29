@@ -600,8 +600,8 @@ function renderLibrary() {
         <div class="read-filter" role="tablist" aria-label="书架筛选">
           ${readTab('all', '全部')}
           ${readTab('unread', '未读')}
-          ${readTab('want', '很想看')}
           ${readTab('read', '已读')}
+          ${readTab('want', '很想看')}
         </div>
         ${
           state.sortMode && novels.length
