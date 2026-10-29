@@ -819,6 +819,11 @@ button {
   font-size: 1.15rem;
 }
 
+.random-modal .star-row .star-icon {
+  width: 1.15em;
+  height: 1.15em;
+}
+
 .random-tags {
   margin: 0;
   padding-left: 0;
@@ -1352,6 +1357,29 @@ button {
   letter-spacing: 0;
 }
 
+.star-icon {
+  display: block;
+  width: 1em;
+  height: 1em;
+  overflow: visible;
+}
+
+.star-icon path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.star.on .star-icon path,
+.star-btn.on .star-icon path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  paint-order: stroke fill;
+}
+
 .star.on,
 .star-btn.on {
   color: #c4922a;
@@ -1365,6 +1393,9 @@ button {
   line-height: 1;
   font: inherit;
   font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .star-btn:hover,
@@ -1376,6 +1407,11 @@ button {
 .star-picker .star-btn {
   font-size: 1.35rem;
   padding: 2px 3px;
+}
+
+.star-picker .star-btn .star-icon {
+  width: 1.15em;
+  height: 1.15em;
 }
 
 .star-clear {

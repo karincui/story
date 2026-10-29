@@ -748,6 +748,9 @@ async function runRandomPick({ excludeId = '' } = {}) {
 
 const HEART_SVG = `<svg class="want-heart-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`
 
+/** 圆滑五角星（stroke-linejoin 圆角尖） */
+const STAR_SVG = `<svg class="star-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M12 3.2l2.45 5.35 5.85.5-4.4 3.85 1.35 5.7L12 15.9l-5.25 2.7 1.35-5.7-4.4-3.85 5.85-.5L12 3.2z"/></svg>`
+
 /** 星星行：卡片可点改分；表单用 data-rating 容器 */
 function renderStars(rating, { interactive = false, novelId = '', inputId = '' } = {}) {
   const r = clampRating(rating)
@@ -755,12 +758,12 @@ function renderStars(rating, { interactive = false, novelId = '', inputId = '' }
     .map((i) => {
       const on = i <= r
       if (interactive && novelId) {
-        return `<button type="button" class="star-btn ${on ? 'on' : ''}" data-rate-novel="${novelId}" data-rate-value="${i}" title="${i} 星" aria-label="${i} 星">${on ? '★' : '☆'}</button>`
+        return `<button type="button" class="star-btn ${on ? 'on' : ''}" data-rate-novel="${novelId}" data-rate-value="${i}" title="${i} 星" aria-label="${i} 星">${STAR_SVG}</button>`
       }
       if (interactive && inputId) {
-        return `<button type="button" class="star-btn ${on ? 'on' : ''}" data-form-star="${i}" title="${i} 星" aria-label="${i} 星">${on ? '★' : '☆'}</button>`
+        return `<button type="button" class="star-btn ${on ? 'on' : ''}" data-form-star="${i}" title="${i} 星" aria-label="${i} 星">${STAR_SVG}</button>`
       }
-      return `<span class="star ${on ? 'on' : ''}" aria-hidden="true">${on ? '★' : '☆'}</span>`
+      return `<span class="star ${on ? 'on' : ''}" aria-hidden="true">${STAR_SVG}</span>`
     })
     .join('')
   if (inputId) {
@@ -2922,7 +2925,6 @@ function bindModal() {
       }
       const on = v <= r
       btn.classList.toggle('on', on)
-      btn.textContent = on ? '★' : '☆'
     })
   }
 
