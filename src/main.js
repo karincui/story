@@ -698,26 +698,29 @@ function renderRandomModal() {
         <p class="random-eyebrow">不知道看什么？抽中了</p>
         <h2 id="random-title">${escapeHtml(n.title)}</h2>
         ${byline}
-        <div class="view-row">
+        <div class="view-row random-status-row">
           ${renderStars(rating)}
           <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
+          <span
+            class="want-mark view-want-mark ${wantToRead ? 'on' : ''}"
+            title="${wantToRead ? '很想看' : '未标很想看'}"
+            aria-label="${wantToRead ? '很想看' : '未标很想看'}"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
+            </svg>
+          </span>
+        </div>
+        <div class="view-block">
+          <h3>标签</h3>
           ${
-            wantToRead
-              ? `<span class="want-mark on view-want-mark" title="很想看" aria-label="很想看">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                    <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
-                  </svg>
-                </span>`
-              : ''
+            statusTags.length
+              ? `<div class="card-tags random-tags">${statusTags
+                  .map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`)
+                  .join('')}</div>`
+              : `<p class="muted">无</p>`
           }
         </div>
-        ${
-          statusTags.length
-            ? `<div class="card-tags random-tags">${statusTags
-                .map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`)
-                .join('')}</div>`
-            : `<p class="muted random-no-tags">暂无标签</p>`
-        }
         <div class="view-block">
           <h3>评价</h3>
           <p class="${review ? '' : 'muted'}">${review ? escapeHtml(review) : '还没有写评价'}</p>
