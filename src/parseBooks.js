@@ -77,6 +77,7 @@ function cleanAuthor(author) {
 function cleanTitle(title) {
   return String(title || '')
     .replace(/^[\d０-９]{1,2}[\.．、\)）]?\s*/, '')
+    .replace(/[《》]/g, '')
     .replace(/[#＃].*$/, '')
     .replace(/\s+/g, ' ')
     .trim()

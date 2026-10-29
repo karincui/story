@@ -2245,6 +2245,95 @@ button {
   color: var(--ink-muted);
 }
 
+.preview-backdrop {
+  z-index: 68;
+  padding: 12px;
+}
+
+.preview-modal {
+  width: min(960px, 100%);
+  max-height: min(94vh, 920px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+  border-radius: var(--radius);
+  padding: 12px 14px 10px;
+  box-shadow: 0 18px 48px rgba(20, 30, 40, 0.22);
+}
+
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.preview-name {
+  flex: 1 1 120px;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-zoom-controls,
+.preview-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.preview-zoom-label {
+  min-width: 3.2em;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: min(58vh, 560px);
+  max-height: min(72vh, 720px);
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: #10161c;
+  cursor: grab;
+  touch-action: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-stage.panning {
+  cursor: grabbing;
+}
+
+.preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform-origin: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+.preview-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
 .crop-backdrop {
   z-index: 70;
   padding: 12px;

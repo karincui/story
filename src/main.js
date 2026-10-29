@@ -59,6 +59,8 @@ const state = {
   rawOcr: '',
   /** @type {number|null} */
   cropIndex: null,
+  /** @type {number|null} 截图预览（可缩放） */
+  previewIndex: null,
   recognizing: false,
   progress: { label: '', pct: 0 },
   importMsg: '',
@@ -368,6 +370,7 @@ function render() {
     ${state.viewingId ? renderViewModal() : ''}
     ${state.randomNovel ? renderRandomModal() : ''}
     ${state.readerOpen ? renderTxtReader() : ''}
+    ${state.previewIndex !== null ? renderPreviewModal() : ''}
     ${state.cropIndex !== null ? renderCropModal() : ''}
   `
   bindEvents()
@@ -998,7 +1001,7 @@ function renderImport() {
         <div class="dropzone" id="dropzone">
           <div class="dropzone-icon">图</div>
           <p>拖拽截图 / 封面到这里</p>
-          <span class="muted">支持多张 · 点图裁剪 · 点 × 移除</span>
+          <span class="muted">支持多张 · 点图查看（可缩放）· 点 × 移除</span>
           <button class="btn" id="pick-files" type="button">选择文件</button>
           <input type="file" id="file-input" accept="image/*" multiple hidden />
         </div>
@@ -1008,15 +1011,15 @@ function renderImport() {
                 .map(
                   (f, i) => `
                   <div class="thumb-wrap">
-                    <button type="button" class="thumb-btn" data-crop-file="${i}" title="点击裁剪">
+                    <button type="button" class="thumb-btn" data-preview-file="${i}" title="点击查看">
                       <img class="thumb" src="${f.preview}" alt="" />
-                      <span class="thumb-crop-hint">裁剪</span>
+                      <span class="thumb-crop-hint">查看</span>
                     </button>
                     <button type="button" class="thumb-rm" data-rm-file="${i}" title="移除" aria-label="移除">×</button>
                   </div>`,
                 )
                 .join('')}</div>
-              <p class="muted thumb-tip">点缩略图可裁剪；点 × 移除</p>`
+              <p class="muted thumb-tip">点缩略图可放大查看、缩放；预览里可再裁剪；点 × 移除</p>`
             : ''
         }
         <div class="progress-box">
@@ -2403,6 +2406,7 @@ function bindEvents() {
   bindImport()
   bindExcel()
   bindTxtReader()
+  bindPreviewModal()
   bindCropModal()
 }
 
@@ -3043,6 +3047,173 @@ function bindModal() {
 /** @type {{ index: number, natW: number, natH: number, sel: { x: number, y: number, w: number, h: number } } | null} */
 let cropSession = null
 
+/** @type {{ index: number, scale: number, x: number, y: number } | null} */
+let previewSession = null
+
+const PREVIEW_ZOOM_MIN = 0.25
+const PREVIEW_ZOOM_MAX = 5
+const PREVIEW_ZOOM_STEP = 0.25
+
+function closePreviewModal() {
+  state.previewIndex = null
+  previewSession = null
+  render()
+}
+
+function renderPreviewModal() {
+  const item = state.importFiles[state.previewIndex]
+  if (!item) return ''
+  const name = item.file?.name || '图片'
+  return `
+    <div class="modal-backdrop preview-backdrop" id="preview-backdrop">
+      <div class="preview-modal" role="dialog" aria-modal="true" aria-label="查看图片">
+        <div class="preview-toolbar">
+          <span class="preview-name" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+          <div class="preview-zoom-controls">
+            <button type="button" class="btn ghost sm" id="preview-zoom-out" title="缩小" aria-label="缩小">−</button>
+            <span class="preview-zoom-label" id="preview-zoom-label">100%</span>
+            <button type="button" class="btn ghost sm" id="preview-zoom-in" title="放大" aria-label="放大">+</button>
+            <button type="button" class="btn ghost sm" id="preview-zoom-reset" title="适应窗口">适应</button>
+          </div>
+          <div class="preview-actions">
+            <button type="button" class="btn ghost sm" id="preview-to-crop">裁剪</button>
+            <button type="button" class="btn ghost sm" id="preview-close">关闭</button>
+          </div>
+        </div>
+        <div class="preview-stage" id="preview-stage">
+          <img id="preview-img" class="preview-img" src="${item.preview}" alt="" draggable="false" />
+        </div>
+        <p class="muted preview-hint">滚轮缩放 · 拖动平移 · 也可点 − / +</p>
+      </div>
+    </div>
+  `
+}
+
+function syncPreviewTransform() {
+  const img = app.querySelector('#preview-img')
+  const label = app.querySelector('#preview-zoom-label')
+  if (!img || !previewSession) return
+  const { scale, x, y } = previewSession
+  img.style.transform = `translate(${x}px, ${y}px) scale(${scale})`
+  if (label) label.textContent = `${Math.round(scale * 100)}%`
+}
+
+function clampPreviewScale(scale) {
+  return Math.min(PREVIEW_ZOOM_MAX, Math.max(PREVIEW_ZOOM_MIN, scale))
+}
+
+function setPreviewScale(next, originClientX, originClientY) {
+  if (!previewSession) return
+  const stage = app.querySelector('#preview-stage')
+  const img = app.querySelector('#preview-img')
+  if (!stage || !img) {
+    previewSession.scale = clampPreviewScale(next)
+    syncPreviewTransform()
+    return
+  }
+  const prev = previewSession.scale
+  const scale = clampPreviewScale(next)
+  if (scale === prev) {
+    syncPreviewTransform()
+    return
+  }
+  const rect = stage.getBoundingClientRect()
+  const cx = (originClientX ?? rect.left + rect.width / 2) - rect.left - rect.width / 2
+  const cy = (originClientY ?? rect.top + rect.height / 2) - rect.top - rect.height / 2
+  // 以视口中心/指针为锚点缩放
+  previewSession.x = cx - ((cx - previewSession.x) * scale) / prev
+  previewSession.y = cy - ((cy - previewSession.y) * scale) / prev
+  previewSession.scale = scale
+  syncPreviewTransform()
+}
+
+function bindPreviewModal() {
+  if (state.previewIndex === null) return
+  const item = state.importFiles[state.previewIndex]
+  if (!item) {
+    closePreviewModal()
+    return
+  }
+
+  if (!previewSession || previewSession.index !== state.previewIndex) {
+    previewSession = { index: state.previewIndex, scale: 1, x: 0, y: 0 }
+  }
+  syncPreviewTransform()
+
+  app.querySelector('#preview-close')?.addEventListener('click', () => closePreviewModal())
+  app.querySelector('#preview-backdrop')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'preview-backdrop') closePreviewModal()
+  })
+  app.querySelector('#preview-zoom-in')?.addEventListener('click', () => {
+    setPreviewScale(previewSession.scale + PREVIEW_ZOOM_STEP)
+  })
+  app.querySelector('#preview-zoom-out')?.addEventListener('click', () => {
+    setPreviewScale(previewSession.scale - PREVIEW_ZOOM_STEP)
+  })
+  app.querySelector('#preview-zoom-reset')?.addEventListener('click', () => {
+    if (!previewSession) return
+    previewSession.scale = 1
+    previewSession.x = 0
+    previewSession.y = 0
+    syncPreviewTransform()
+  })
+  app.querySelector('#preview-to-crop')?.addEventListener('click', () => {
+    const i = state.previewIndex
+    state.previewIndex = null
+    previewSession = null
+    state.cropIndex = i
+    render()
+  })
+
+  const stage = app.querySelector('#preview-stage')
+  if (!stage) return
+
+  stage.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault()
+      if (!previewSession) return
+      const delta = e.deltaY > 0 ? -PREVIEW_ZOOM_STEP : PREVIEW_ZOOM_STEP
+      setPreviewScale(previewSession.scale + delta, e.clientX, e.clientY)
+    },
+    { passive: false },
+  )
+
+  /** @type {{ pointerId: number, startX: number, startY: number, origX: number, origY: number } | null} */
+  let drag = null
+  stage.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || !previewSession) return
+    if (e.target?.closest?.('button')) return
+    drag = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      origX: previewSession.x,
+      origY: previewSession.y,
+    }
+    stage.setPointerCapture(e.pointerId)
+    stage.classList.add('panning')
+  })
+  stage.addEventListener('pointermove', (e) => {
+    if (!drag || !previewSession || e.pointerId !== drag.pointerId) return
+    previewSession.x = drag.origX + (e.clientX - drag.startX)
+    previewSession.y = drag.origY + (e.clientY - drag.startY)
+    syncPreviewTransform()
+  })
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.pointerId) return
+    drag = null
+    stage.classList.remove('panning')
+    try {
+      stage.releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
+  stage.addEventListener('pointerup', endDrag)
+  stage.addEventListener('pointercancel', endDrag)
+}
+
 function closeCropModal() {
   state.cropIndex = null
   cropSession = null
@@ -3323,6 +3494,10 @@ function bindImport() {
     state.rawOcr = ''
     state.importDrafts = []
     state.importMsg = ''
+    state.previewIndex = null
+    previewSession = null
+    state.cropIndex = null
+    cropSession = null
     render()
   })
 
@@ -3356,13 +3531,16 @@ function bindImport() {
     }),
   )
 
-    app.querySelectorAll('[data-crop-file]').forEach((btn) => {
+  app.querySelectorAll('[data-preview-file]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault()
       e.stopPropagation()
-      const i = Number(btn.dataset.cropFile)
+      const i = Number(btn.dataset.previewFile)
       if (Number.isNaN(i) || !state.importFiles[i]) return
-      state.cropIndex = i
+      state.previewIndex = i
+      state.cropIndex = null
+      cropSession = null
+      previewSession = null
       render()
     })
   })
@@ -3380,6 +3558,12 @@ function bindImport() {
         cropSession = null
       } else if (state.cropIndex != null && state.cropIndex > i) {
         state.cropIndex -= 1
+      }
+      if (state.previewIndex === i) {
+        state.previewIndex = null
+        previewSession = null
+      } else if (state.previewIndex != null && state.previewIndex > i) {
+        state.previewIndex -= 1
       }
       render()
     })
