@@ -11,6 +11,8 @@ import {
   setNovelRead,
   setNovelRating,
   clampRating,
+  pickRandomNovel,
+  rememberNovel,
   moveNovelInView,
   refreshStore,
   loadNovelsPage,
@@ -103,6 +105,8 @@ const state = {
   readerSettingsOpen: false,
   /** 阅读器进度条是否展开 */
   readerProgressOpen: false,
+  /** 随机抽中的小说（弹层） */
+  randomNovel: null,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -366,6 +370,7 @@ function render() {
       }
     </div>
     ${state.editingId !== null ? renderModal() : ''}
+    ${state.randomNovel ? renderRandomModal() : ''}
     ${state.galleryPreviewId ? renderGalleryLightbox() : ''}
     ${state.readerOpen ? renderTxtReader() : ''}
     ${state.cropIndex !== null ? renderCropModal() : ''}
@@ -577,6 +582,7 @@ function renderLibrary() {
           <h2>小说库</h2>
           <div class="toolbar-right">
             <span class="muted">共 ${meta.total} 本 · 每页 ${PAGE_SIZE}</span>
+            <button type="button" class="btn ghost sm" id="random-novel" title="从当前筛选里随机抽一本" ${meta.total ? '' : 'disabled'}>随机</button>
             <button type="button" class="btn ghost sm" id="refresh-library" title="从云端重新拉取书单">刷新</button>
             ${
               novels.length || state.readFilter !== 'all' || meta.total > 0
@@ -641,6 +647,73 @@ function formatAttachSize(n) {
   if (!n || n < 1024) return `${n || 0} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
   return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function renderRandomModal() {
+  const n = state.randomNovel
+  if (!n) return ''
+  const byline = n.author ? `<p class="random-author">作者：${escapeHtml(n.author)}</p>` : ''
+  const rating = clampRating(n.rating)
+  const review = (n.review || '').trim()
+  const synopsis = (n.synopsis || '').trim()
+  const statusTags = (n.tags || []).filter((t) => t !== '未读' && t !== '已读')
+  const isTxt =
+    n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime, n.attachmentPath)
+  const filterNote =
+    state.readFilter !== 'all' || state.query || state.filterTags.length
+      ? `<p class="muted random-filter-note">来自当前筛选（${
+          state.readFilter === 'unread' ? '未读' : state.readFilter === 'read' ? '已读' : '全部'
+        }${state.filterTags.length ? ` · ${escapeHtml(state.filterTags.join('、'))}` : ''}${
+          state.query ? ` · 「${escapeHtml(state.query)}」` : ''
+        }）</p>`
+      : ''
+  return `
+    <div class="modal-backdrop" id="random-backdrop">
+      <div class="modal random-modal" role="dialog" aria-modal="true" aria-labelledby="random-title">
+        <p class="random-eyebrow">不知道看什么？抽中了</p>
+        <h2 id="random-title">${escapeHtml(n.title)}</h2>
+        ${byline}
+        ${renderStars(rating)}
+        ${
+          statusTags.length
+            ? `<div class="card-tags random-tags">${statusTags
+                .map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`)
+                .join('')}</div>`
+            : ''
+        }
+        ${review ? `<p class="random-review">${escapeHtml(review)}</p>` : ''}
+        ${synopsis ? `<p class="muted random-synopsis">${escapeHtml(synopsis)}</p>` : ''}
+        ${filterNote}
+        <div class="modal-actions random-actions">
+          <button type="button" class="btn ghost" id="random-close">关闭</button>
+          <button type="button" class="btn ghost" id="random-edit">编辑</button>
+          ${
+            n.attachmentPath
+              ? `<button type="button" class="btn ghost" id="random-open-attach">${isTxt ? '阅读' : '打开附件'}</button>`
+              : ''
+          }
+          <button type="button" class="btn" id="random-again">再抽一次</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+async function runRandomPick({ excludeId = '' } = {}) {
+  const novel = await pickRandomNovel({
+    query: state.query,
+    tags: state.filterTags,
+    readFilter: state.readFilter,
+    excludeId,
+  })
+  if (!novel) {
+    state.randomNovel = null
+    alert('当前筛选里没有可抽的书')
+    return null
+  }
+  rememberNovel(novel)
+  state.randomNovel = novel
+  return novel
 }
 
 /** 星星行：卡片可点改分；表单用 data-rating 容器 */
@@ -1785,6 +1858,18 @@ function bindEvents() {
     }),
   )
 
+  app.querySelector('#random-novel')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      try {
+        await runBusy('抽一本…', () => runRandomPick())
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
+
   app.querySelector('#page-prev')?.addEventListener(
     'click',
     withClickGuard(async () => {
@@ -2165,11 +2250,66 @@ function bindEvents() {
 
   bindSwipe()
   bindModal()
+  bindRandomModal()
   bindImport()
   bindExcel()
   bindGallery()
   bindTxtReader()
   bindCropModal()
+}
+
+function bindRandomModal() {
+  if (!state.randomNovel) return
+
+  const close = () => {
+    state.randomNovel = null
+    render()
+  }
+
+  app.querySelector('#random-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'random-backdrop') close()
+  })
+  app.querySelector('#random-close')?.addEventListener('click', close)
+
+  app.querySelector('#random-again')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      try {
+        await runBusy('再抽一次…', () =>
+          runRandomPick({ excludeId: state.randomNovel?.id || '' }),
+        )
+        render()
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
+
+  app.querySelector('#random-edit')?.addEventListener('click', () => {
+    const n = state.randomNovel
+    if (!n) return
+    rememberNovel(n)
+    state.editingId = n.id
+    state.pendingAttachmentFile = null
+    state.pendingAttachmentClear = false
+    state.randomNovel = null
+    render()
+  })
+
+  app.querySelector('#random-open-attach')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const n = state.randomNovel
+      if (!n?.attachmentPath) return
+      try {
+        state.randomNovel = null
+        await openNovelAttachment(n)
+      } catch (err) {
+        alert(err.message || String(err))
+        render()
+      }
+    }),
+  )
 }
 
 function bindGallery() {

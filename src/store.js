@@ -226,21 +226,11 @@ async function refreshNovelTags(userId) {
 }
 
 /**
- * 分页拉取小说列表（服务端筛选/排序）
- * @param {{ page?: number, query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read' }} [opts]
+ * 给列表/随机共用的筛选条件
+ * @param {import('@supabase/supabase-js').PostgrestFilterBuilder} q
+ * @param {{ query?: string, tags?: string[], readFilter?: string }} opts
  */
-export async function loadNovelsPage(opts = {}) {
-  const userId = await requireUserId()
-  const query = opts.query ?? pageMeta.query ?? ''
-  const tags = opts.tags ?? pageMeta.tags ?? []
-  const readFilter = opts.readFilter ?? pageMeta.readFilter ?? 'all'
-  let page = Math.max(1, Number(opts.page) || pageMeta.page || 1)
-
-  let q = supabase
-    .from('novels')
-    .select('*', { count: 'exact' })
-    .eq('user_id', userId)
-
+function applyNovelFilters(q, { query = '', tags = [], readFilter = 'all' } = {}) {
   if (readFilter === 'read') q = q.eq('is_read', true)
   else if (readFilter === 'unread') q = q.eq('is_read', false)
 
@@ -256,6 +246,64 @@ export async function loadNovelsPage(opts = {}) {
       `title.ilike.%${qstr}%,author.ilike.%${qstr}%,synopsis.ilike.%${qstr}%,review.ilike.%${qstr}%`,
     )
   }
+  return q
+}
+
+/**
+ * 从当前筛选结果里随机抽一本（服务端按 offset 取）
+ * @param {{ query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read', excludeId?: string }} [opts]
+ * @returns {Promise<object|null>}
+ */
+export async function pickRandomNovel(opts = {}) {
+  const userId = await requireUserId()
+  const query = opts.query ?? pageMeta.query ?? ''
+  const tags = opts.tags ?? pageMeta.tags ?? []
+  const readFilter = opts.readFilter ?? pageMeta.readFilter ?? 'all'
+  const excludeId = opts.excludeId || ''
+
+  const { count, error: countErr } = await applyNovelFilters(
+    supabase.from('novels').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+    { query, tags, readFilter },
+  )
+  if (countErr) throw countErr
+  const total = count ?? 0
+  if (total <= 0) return null
+
+  const fetchAt = async (offset) => {
+    const { data, error } = await applyNovelFilters(
+      supabase.from('novels').select('*').eq('user_id', userId),
+      { query, tags, readFilter },
+    )
+      .order('id', { ascending: true })
+      .range(offset, offset)
+    if (error) throw error
+    return data?.[0] ? rowToNovel(data[0]) : null
+  }
+
+  // 尽量避开刚抽到的同一本
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const novel = await fetchAt(Math.floor(Math.random() * total))
+    if (!novel) return null
+    if (!excludeId || novel.id !== excludeId || total === 1) return novel
+  }
+  return fetchAt(Math.floor(Math.random() * total))
+}
+
+/**
+ * 分页拉取小说列表（服务端筛选/排序）
+ * @param {{ page?: number, query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read' }} [opts]
+ */
+export async function loadNovelsPage(opts = {}) {
+  const userId = await requireUserId()
+  const query = opts.query ?? pageMeta.query ?? ''
+  const tags = opts.tags ?? pageMeta.tags ?? []
+  const readFilter = opts.readFilter ?? pageMeta.readFilter ?? 'all'
+  let page = Math.max(1, Number(opts.page) || pageMeta.page || 1)
+
+  let q = applyNovelFilters(
+    supabase.from('novels').select('*', { count: 'exact' }).eq('user_id', userId),
+    { query, tags, readFilter },
+  )
 
   if (getLibrarySortPref() === 'manual') {
     q = q.order('sort_order', { ascending: true }).order('created_at', { ascending: false })
@@ -507,6 +555,14 @@ export async function moveNovelInView(visibleIds, id, action) {
 
 export function getNovel(id) {
   return novelsCache.find((n) => n.id === id) || null
+}
+
+/** 把某本放进当前页缓存（随机抽到但不在本页时，便于编辑/评分） */
+export function rememberNovel(novel) {
+  if (!novel?.id) return
+  const i = novelsCache.findIndex((n) => n.id === novel.id)
+  if (i >= 0) novelsCache[i] = novel
+  else novelsCache.push(novel)
 }
 
 /** 切换已读 / 未读（同步「已读」「未读」标签） */
