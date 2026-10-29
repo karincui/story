@@ -9,6 +9,8 @@ import {
   deleteNovel,
   getNovel,
   setNovelRead,
+  setNovelRating,
+  clampRating,
   moveNovelInView,
   refreshStore,
   loadNovelsPage,
@@ -641,15 +643,40 @@ function formatAttachSize(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
+/** 星星行：卡片可点改分；表单用 data-rating 容器 */
+function renderStars(rating, { interactive = false, novelId = '', inputId = '' } = {}) {
+  const r = clampRating(rating)
+  const stars = [1, 2, 3, 4, 5]
+    .map((i) => {
+      const on = i <= r
+      if (interactive && novelId) {
+        return `<button type="button" class="star-btn ${on ? 'on' : ''}" data-rate-novel="${novelId}" data-rate-value="${i}" title="${i} 星" aria-label="${i} 星">${on ? '★' : '☆'}</button>`
+      }
+      if (interactive && inputId) {
+        return `<button type="button" class="star-btn ${on ? 'on' : ''}" data-form-star="${i}" title="${i} 星" aria-label="${i} 星">${on ? '★' : '☆'}</button>`
+      }
+      return `<span class="star ${on ? 'on' : ''}" aria-hidden="true">${on ? '★' : '☆'}</span>`
+    })
+    .join('')
+  if (inputId) {
+    return `<div class="star-picker" id="${inputId}" data-rating="${r}" role="group" aria-label="评分">${stars}<button type="button" class="star-clear" data-form-star="0" ${r ? '' : 'hidden'}>清除</button></div>`
+  }
+  return `<div class="star-row" role="img" aria-label="${r ? `${r} 星` : '未评分'}">${stars}</div>`
+}
+
 function renderCard(n, index = 0, total = 0) {
   const byline = n.author ? ` <span class="by-author">by${escapeHtml(n.author)}</span>` : ''
   const isRead = Boolean(n.isRead)
+  const rating = clampRating(n.rating)
   const isTxt =
     n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime, n.attachmentPath)
   const attach = n.attachmentPath
     ? `<button type="button" class="attach-chip" data-open-attach="${n.id}" title="${escapeHtml(n.attachmentName || '附件')}">${isTxt ? '📖 阅读' : '📎'} ${escapeHtml((n.attachmentName || '附件').slice(0, 14))}${(n.attachmentName || '').length > 14 ? '…' : ''}</button>`
     : ''
   const statusTags = (n.tags || []).filter((t) => t !== '未读' && t !== '已读')
+  const reviewLine = (n.review || '').trim()
+    ? `<p class="card-review">${escapeHtml(n.review.trim())}</p>`
+    : ''
   const sortControls = state.sortMode
     ? `<div class="sort-controls">
         <button type="button" class="btn ghost sm" data-sort="top" data-sort-id="${n.id}" ${index === 0 ? 'disabled' : ''}>置顶</button>
@@ -669,7 +696,11 @@ function renderCard(n, index = 0, total = 0) {
       </div>
       <div class="swipe-content">
         <div class="card-main">
-          <h3>${escapeHtml(n.title)}${byline}</h3>
+          <div class="card-title-row">
+            <h3>${escapeHtml(n.title)}${byline}</h3>
+            ${renderStars(rating, { interactive: !state.sortMode, novelId: n.id })}
+          </div>
+          ${reviewLine}
           <div class="card-tags">
             <button
               type="button"
@@ -1622,8 +1653,8 @@ function renderAttachmentField(novel) {
 function renderModal() {
   const isNew = state.editingId === 'new'
   const novel = isNew
-    ? { title: '', author: '', synopsis: '', tags: ['未读'] }
-    : getNovel(state.editingId) || { title: '', author: '', synopsis: '', tags: [] }
+    ? { title: '', author: '', synopsis: '', tags: ['未读'], rating: 0, review: '' }
+    : getNovel(state.editingId) || { title: '', author: '', synopsis: '', tags: [], rating: 0, review: '' }
   const tags = getAllTags()
 
   return `
@@ -1634,6 +1665,11 @@ function renderModal() {
         <label class="field"><span>书名</span><input id="f-title" value="${escapeHtml(novel.title)}" /></label>
         <label class="field"><span>作者（选填）</span><input id="f-author" value="${escapeHtml(novel.author)}" placeholder="有同名时建议填写" /></label>
         <label class="field"><span>简介</span><textarea id="f-synopsis">${escapeHtml(novel.synopsis || '')}</textarea></label>
+        <div class="field">
+          <span>评分</span>
+          ${renderStars(novel.rating || 0, { interactive: true, inputId: 'f-rating' })}
+        </div>
+        <label class="field"><span>评价</span><textarea id="f-review" rows="3" placeholder="写几句观感…">${escapeHtml(novel.review || '')}</textarea></label>
         ${renderAttachmentField(novel)}
         <div class="field">
           <span>标签（可多选，也可新增）</span>
@@ -1906,6 +1942,30 @@ function bindEvents() {
           await runBusy(novel.isRead ? '标为未读…' : '标为已读…', async () => {
             await setNovelRead(id, !novel.isRead)
             await reloadLibrary(getPageMeta().page)
+          })
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
+      }),
+    )
+  })
+
+  app.querySelectorAll('[data-rate-novel]').forEach((btn) => {
+    const stop = (e) => e.stopPropagation()
+    btn.addEventListener('pointerdown', stop)
+    btn.addEventListener('touchstart', stop, { passive: true })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const id = btn.dataset.rateNovel
+        const value = Number(btn.dataset.rateValue)
+        if (!id || Number.isNaN(value)) return
+        try {
+          await runBusy('评分…', async () => {
+            await setNovelRating(id, value)
           })
           render()
         } catch (err) {
@@ -2627,6 +2687,33 @@ function bindModal() {
     })
   })
 
+  const paintFormStars = (rating) => {
+    const picker = app.querySelector('#f-rating')
+    if (!picker) return
+    const r = clampRating(rating)
+    picker.dataset.rating = String(r)
+    picker.querySelectorAll('[data-form-star]').forEach((btn) => {
+      const v = Number(btn.dataset.formStar)
+      if (v === 0) {
+        btn.hidden = !r
+        return
+      }
+      const on = v <= r
+      btn.classList.toggle('on', on)
+      btn.textContent = on ? '★' : '☆'
+    })
+  }
+
+  app.querySelectorAll('#f-rating [data-form-star]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const picker = app.querySelector('#f-rating')
+      const next = Number(btn.dataset.formStar)
+      const cur = clampRating(picker?.dataset.rating)
+      // 再点同一星 → 清除
+      paintFormStars(next === cur && next > 0 ? 0 : next)
+    })
+  })
+
   app.querySelector('#modal-add-tag')?.addEventListener(
     'click',
     withClickGuard(async () => {
@@ -2642,6 +2729,8 @@ function bindModal() {
     const title = app.querySelector('#f-title')?.value
     const author = app.querySelector('#f-author')?.value
     const synopsis = app.querySelector('#f-synopsis')?.value
+    const review = app.querySelector('#f-review')?.value
+    const rating = clampRating(app.querySelector('#f-rating')?.dataset.rating)
     const active = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
       .map((b) => b.dataset.toggleTag)
       .filter(Boolean)
@@ -2652,9 +2741,12 @@ function bindModal() {
       const t = app.querySelector('#f-title')
       const a = app.querySelector('#f-author')
       const s = app.querySelector('#f-synopsis')
+      const rv = app.querySelector('#f-review')
       if (t) t.value = title
       if (a) a.value = author
       if (s) s.value = synopsis
+      if (rv) rv.value = review
+      paintFormStars(rating)
       app.querySelectorAll('[data-toggle-tag]').forEach((b) => {
         if (active.includes(b.dataset.toggleTag)) b.classList.add('active')
         else b.classList.remove('active')
@@ -2669,6 +2761,8 @@ function bindModal() {
       const title = app.querySelector('#f-title').value
       const author = app.querySelector('#f-author').value
       const synopsis = app.querySelector('#f-synopsis').value
+      const review = app.querySelector('#f-review')?.value || ''
+      const rating = clampRating(app.querySelector('#f-rating')?.dataset.rating)
       const tags = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
         .map((b) => b.dataset.toggleTag)
         .filter(Boolean)
@@ -2680,6 +2774,8 @@ function bindModal() {
             title,
             author,
             synopsis,
+            review,
+            rating,
             tags,
             attachmentFile: state.pendingAttachmentFile || undefined,
             clearAttachment: state.pendingAttachmentClear,

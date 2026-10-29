@@ -815,9 +815,24 @@ button {
     bottom: 8px;
   }
 
+  .card-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
   .swipe-content h3 {
     font-size: 0.88rem;
     line-height: 1.25;
+  }
+
+  .star-btn {
+    font-size: 0.92rem;
+  }
+
+  .card-review {
+    font-size: 0.7rem;
+    -webkit-line-clamp: 3;
   }
 
   .by-author {
@@ -1054,9 +1069,18 @@ button {
   opacity: 0.7;
 }
 
+.card-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding-left: 4px;
+}
+
 .swipe-content h3 {
   margin: 0;
-  padding-left: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
   font-family: var(--display);
   font-size: 1.02rem;
   font-weight: 700;
@@ -1064,6 +1088,81 @@ button {
   letter-spacing: 0.01em;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.star-row,
+.star-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  line-height: 1;
+}
+
+.star-row {
+  position: relative;
+  z-index: 2;
+  margin-top: 2px;
+}
+
+.star,
+.star-btn {
+  font-size: 0.95rem;
+  color: color-mix(in srgb, var(--ink-faint) 75%, #c4a35a);
+  letter-spacing: 0;
+}
+
+.star.on,
+.star-btn.on {
+  color: #c4922a;
+}
+
+.star-btn {
+  border: none;
+  background: transparent;
+  padding: 0 1px;
+  cursor: pointer;
+  line-height: 1;
+  font: inherit;
+  font-size: 1.05rem;
+}
+
+.star-btn:hover,
+.star-btn:focus-visible {
+  color: #c4922a;
+  outline: none;
+}
+
+.star-picker .star-btn {
+  font-size: 1.35rem;
+  padding: 2px 3px;
+}
+
+.star-clear {
+  border: none;
+  background: transparent;
+  color: var(--ink-muted);
+  font: inherit;
+  font-size: 0.75rem;
+  margin-left: 6px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.star-clear:hover {
+  color: var(--ink);
+}
+
+.card-review {
+  margin: 0;
+  padding-left: 4px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--ink-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .by-author {

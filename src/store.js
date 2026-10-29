@@ -20,7 +20,7 @@ export const PRESET_TAGS = [
 const ATTACH_BUCKET = 'novel-attachments'
 export const ATTACH_MAX_BYTES = 20 * 1024 * 1024
 
-/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,isRead:boolean,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
+/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,isRead:boolean,rating:number,review:string,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
 let novelsCache = []
 /** @type {{ customTags: string[], hiddenPresets: string[] }} */
 let prefsCache = { customTags: [], hiddenPresets: [] }
@@ -29,6 +29,13 @@ function syncReadTags(tags, isRead) {
   const next = (tags || []).filter((t) => t !== '未读' && t !== '已读')
   next.unshift(isRead ? '已读' : '未读')
   return next
+}
+
+/** @param {unknown} n @returns {number} 0–5 */
+export function clampRating(n) {
+  const r = Number(n)
+  if (!Number.isFinite(r) || r <= 0) return 0
+  return Math.min(5, Math.round(r))
 }
 
 function rowToNovel(row) {
@@ -45,6 +52,8 @@ function rowToNovel(row) {
     tags,
     sortOrder: row.sort_order ?? 0,
     isRead: Boolean(isRead),
+    rating: clampRating(row.rating),
+    review: row.review || '',
     attachmentPath: row.attachment_path || null,
     attachmentName: row.attachment_name || null,
     attachmentMime: row.attachment_mime || null,
@@ -522,6 +531,29 @@ export async function setNovelRead(id, isRead) {
   return novel
 }
 
+/** 设置评分 0–5（再点同一星可取消为 0） */
+export async function setNovelRating(id, rating) {
+  const userId = await requireUserId()
+  const existing = novelsCache.find((n) => n.id === id)
+  if (!existing) throw new Error('找不到这本小说')
+  let next = clampRating(rating)
+  if (next === existing.rating && next > 0) next = 0
+  const { data: row, error } = await supabase
+    .from('novels')
+    .update({
+      rating: next,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('*')
+    .single()
+  if (error) throw error
+  const novel = rowToNovel(row)
+  novelsCache = novelsCache.map((n) => (n.id === novel.id ? novel : n))
+  return novel
+}
+
 /**
  * @param {object} data
  * @param {File} [data.attachmentFile] 新选的附件
@@ -576,6 +608,11 @@ export async function upsertNovel(data) {
         attachPatch = await uploadAttachmentFile(userId, data.id, file)
       }
 
+      const rating =
+        data.rating !== undefined ? clampRating(data.rating) : clampRating(existing.rating)
+      const review =
+        data.review !== undefined ? String(data.review || '').trim() : existing.review || ''
+
       const { data: row, error } = await supabase
         .from('novels')
         .update({
@@ -584,6 +621,8 @@ export async function upsertNovel(data) {
           synopsis: (data.synopsis || '').trim(),
           tags,
           is_read: isRead,
+          rating,
+          review,
           updated_at: nowIso,
           ...attachPatch,
         })
@@ -598,6 +637,9 @@ export async function upsertNovel(data) {
     }
   }
 
+  const rating = clampRating(data.rating)
+  const review = String(data.review || '').trim()
+
   // 新书排到最前（添加倒序）；手动排序模式下也插到第一位
   const minOrder = novelsCache.reduce((m, n) => Math.min(m, n.sortOrder ?? 0), 0)
   const { data: row, error } = await supabase
@@ -609,6 +651,8 @@ export async function upsertNovel(data) {
       synopsis: (data.synopsis || '').trim(),
       tags,
       is_read: isRead,
+      rating,
+      review,
       sort_order: novelsCache.length ? minOrder - 1 : 0,
     })
     .select('*')
