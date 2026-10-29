@@ -744,6 +744,71 @@ button {
   gap: 8px;
 }
 
+.random-modal {
+  max-width: 420px;
+}
+
+.random-eyebrow {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.random-modal h2 {
+  margin: 0 0 4px;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  line-height: 1.3;
+}
+
+.random-author {
+  margin: 0 0 8px;
+  color: var(--teal-mid);
+  font-size: 0.9rem;
+}
+
+.random-modal .star-row {
+  margin: 0 0 10px;
+}
+
+.random-modal .star-row .star {
+  font-size: 1.15rem;
+}
+
+.random-tags {
+  margin: 0 0 10px;
+  padding-left: 0;
+}
+
+.random-review {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.random-synopsis {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.random-filter-note {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+}
+
+.random-actions {
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
 .btn.active-sort {
   border-color: var(--teal);
   color: var(--teal);
