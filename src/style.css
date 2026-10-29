@@ -996,8 +996,62 @@ button {
   border-color: color-mix(in srgb, #6a8578 28%, transparent);
 }
 
-.swipe-item.open .read-chip {
+.want-chip {
+  appearance: none;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #b8860b 28%, transparent);
+  cursor: pointer;
+  flex: 0 0 auto;
+  color: #8a6a2a;
+  background: color-mix(in srgb, #fff8e8 90%, #fff);
+}
+
+.want-chip.on {
+  color: #7a4e00;
+  background: #ffe9b0;
+  border-color: color-mix(in srgb, #d4a017 45%, transparent);
+}
+
+.swipe-item.open .read-chip,
+.swipe-item.open .want-chip {
   visibility: hidden;
+}
+
+.swipe-item.is-want:not(.is-read) .swipe-content::before {
+  background: #d4a017;
+  opacity: 0.95;
+}
+
+.want-field {
+  margin-bottom: 12px;
+}
+
+.want-check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--ink);
+  cursor: pointer;
+  letter-spacing: 0;
+  font-weight: 500;
+}
+
+.want-check-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: #c4922a;
+}
+
+.view-want-chip {
+  pointer-events: none;
+  cursor: default;
 }
 
 .swipe-item.is-unread .swipe-content {

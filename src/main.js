@@ -9,6 +9,7 @@ import {
   deleteNovel,
   getNovel,
   setNovelRead,
+  setNovelWant,
   setNovelRating,
   clampRating,
   pickRandomNovel,
@@ -45,7 +46,7 @@ const state = {
   page: 'library', // library | import | excel | gallery
   query: '',
   filterTags: [],
-  /** all | unread | read */
+  /** all | unread | want | read */
   readFilter: 'all',
   tagManage: false,
   /** 标签筛选面板是否展开 */
@@ -596,9 +597,10 @@ function renderLibrary() {
             }
           </div>
         </div>
-        <div class="read-filter" role="tablist" aria-label="已读筛选">
+        <div class="read-filter" role="tablist" aria-label="书架筛选">
           ${readTab('all', '全部')}
           ${readTab('unread', '未读')}
+          ${readTab('want', '很想看')}
           ${readTab('read', '已读')}
         </div>
         ${
@@ -620,16 +622,20 @@ function renderLibrary() {
                 <h3 class="empty-title">${
                   state.readFilter === 'unread'
                     ? '没有未读书'
-                    : state.readFilter === 'read'
-                      ? '还没有已读书'
-                      : state.query || state.filterTags.length
-                        ? '没有匹配的书'
-                        : '书架还是空的'
+                    : state.readFilter === 'want'
+                      ? '还没有「很想看」'
+                      : state.readFilter === 'read'
+                        ? '还没有已读书'
+                        : state.query || state.filterTags.length
+                          ? '没有匹配的书'
+                          : '书架还是空的'
                 }</h3>
                 <p>${
                   state.readFilter === 'all' && !state.query && !state.filterTags.length
                     ? '手动添加一本，或从截图里识别书名。'
-                    : '换个筛选看看，或点卡片上的「未读/已读」切换状态。'
+                    : state.readFilter === 'want'
+                      ? '点卡片上的「很想看」标记后，会出现在这里。'
+                      : '换个筛选看看，或点卡片上的「未读/已读」切换状态。'
                 }</p>
                 <div class="empty-actions">
                   ${
@@ -665,7 +671,13 @@ function renderRandomModal() {
   const filterNote =
     state.readFilter !== 'all' || state.query || state.filterTags.length
       ? `<p class="muted random-filter-note">来自当前筛选（${
-          state.readFilter === 'unread' ? '未读' : state.readFilter === 'read' ? '已读' : '全部'
+          state.readFilter === 'unread'
+            ? '未读'
+            : state.readFilter === 'want'
+              ? '很想看'
+              : state.readFilter === 'read'
+                ? '已读'
+                : '全部'
         }${state.filterTags.length ? ` · ${escapeHtml(state.filterTags.join('、'))}` : ''}${
           state.query ? ` · 「${escapeHtml(state.query)}」` : ''
         }）</p>`
@@ -743,6 +755,7 @@ function renderStars(rating, { interactive = false, novelId = '', inputId = '' }
 function renderCard(n, index = 0, total = 0) {
   const byline = n.author ? ` <span class="by-author">by${escapeHtml(n.author)}</span>` : ''
   const isRead = Boolean(n.isRead)
+  const wantToRead = Boolean(n.wantToRead)
   const rating = clampRating(n.rating)
   const isTxt =
     n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime, n.attachmentPath)
@@ -761,7 +774,7 @@ function renderCard(n, index = 0, total = 0) {
       </div>`
     : ''
   return `
-    <div class="swipe-item ${isRead ? 'is-read' : 'is-unread'} ${state.sortMode ? 'sort-mode' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(index, 8) * 40}ms">
+    <div class="swipe-item ${isRead ? 'is-read' : 'is-unread'} ${wantToRead ? 'is-want' : ''} ${state.sortMode ? 'sort-mode' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(index, 8) * 40}ms">
       <div class="swipe-actions">
         <button type="button" class="swipe-btn view" data-view="${n.id}" title="查看" aria-label="查看">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 5c-5 0-9.27 3.11-11 7 1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
@@ -788,6 +801,13 @@ function renderCard(n, index = 0, total = 0) {
               title="${isRead ? '点一下标为未读' : '点一下标为已读'}"
               aria-pressed="${isRead ? 'true' : 'false'}"
             >${isRead ? '✓ 已读' : '未读'}</button>
+            <button
+              type="button"
+              class="want-chip ${wantToRead ? 'on' : ''}"
+              data-toggle-want="${n.id}"
+              title="${wantToRead ? '取消很想看' : '标为很想看'}"
+              aria-pressed="${wantToRead ? 'true' : 'false'}"
+            >${wantToRead ? '★ 很想看' : '很想看'}</button>
             ${statusTags.map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
             ${attach}
           </div>
@@ -1738,6 +1758,7 @@ function renderViewModal() {
   const synopsis = (novel.synopsis || '').trim()
   const statusTags = (novel.tags || []).filter((t) => t !== '未读' && t !== '已读')
   const isRead = Boolean(novel.isRead)
+  const wantToRead = Boolean(novel.wantToRead)
   const isTxt =
     novel.attachmentPath &&
     isTextAttachment(novel.attachmentName, novel.attachmentMime, novel.attachmentPath)
@@ -1752,6 +1773,7 @@ function renderViewModal() {
         <div class="view-row">
           ${renderStars(rating)}
           <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
+          <span class="want-chip ${wantToRead ? 'on' : ''} view-want-chip">${wantToRead ? '★ 很想看' : '未标很想看'}</span>
         </div>
         ${
           statusTags.length
@@ -1798,6 +1820,12 @@ function renderModal() {
           ${renderStars(novel.rating || 0, { interactive: true, inputId: 'f-rating' })}
         </div>
         <label class="field"><span>评价</span><textarea id="f-review" rows="6" placeholder="写几句观感…">${escapeHtml(novel.review || '')}</textarea></label>
+        <label class="field want-field">
+          <span class="want-check-row">
+            <input type="checkbox" id="f-want" ${novel.wantToRead ? 'checked' : ''} />
+            很想看
+          </span>
+        </label>
         ${renderAttachmentField(novel)}
         <div class="field">
           <span>标签（可多选，也可新增）</span>
@@ -2081,6 +2109,31 @@ function bindEvents() {
         try {
           await runBusy(novel.isRead ? '标为未读…' : '标为已读…', async () => {
             await setNovelRead(id, !novel.isRead)
+            await reloadLibrary(getPageMeta().page)
+          })
+          render()
+        } catch (err) {
+          alert(err.message || String(err))
+        }
+      }),
+    )
+  })
+
+  app.querySelectorAll('[data-toggle-want]').forEach((btn) => {
+    const stop = (e) => e.stopPropagation()
+    btn.addEventListener('pointerdown', stop)
+    btn.addEventListener('touchstart', stop, { passive: true })
+    btn.addEventListener(
+      'click',
+      withClickGuard(async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        const id = btn.dataset.toggleWant
+        const novel = getNovel(id)
+        if (!novel) return
+        try {
+          await runBusy(novel.wantToRead ? '取消很想看…' : '标为很想看…', async () => {
+            await setNovelWant(id, !novel.wantToRead)
             await reloadLibrary(getPageMeta().page)
           })
           render()
@@ -3016,6 +3069,7 @@ function bindModal() {
       const synopsis = app.querySelector('#f-synopsis').value
       const review = app.querySelector('#f-review')?.value || ''
       const rating = clampRating(app.querySelector('#f-rating')?.dataset.rating)
+      const wantToRead = Boolean(app.querySelector('#f-want')?.checked)
       const tags = [...app.querySelectorAll('#tag-picker .tag-chip.active')]
         .map((b) => b.dataset.toggleTag)
         .filter(Boolean)
@@ -3029,6 +3083,7 @@ function bindModal() {
             synopsis,
             review,
             rating,
+            wantToRead,
             tags,
             attachmentFile: state.pendingAttachmentFile || undefined,
             clearAttachment: state.pendingAttachmentClear,

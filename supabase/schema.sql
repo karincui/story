@@ -14,6 +14,7 @@ create table if not exists public.novels (
   attachment_mime text,
   attachment_size bigint,
   is_read boolean not null default false,
+  want_to_read boolean not null default false,
   rating smallint not null default 0,
   review text not null default '',
   created_at timestamptz not null default now(),
@@ -26,6 +27,7 @@ alter table public.novels add column if not exists attachment_name text;
 alter table public.novels add column if not exists attachment_mime text;
 alter table public.novels add column if not exists attachment_size bigint;
 alter table public.novels add column if not exists is_read boolean not null default false;
+alter table public.novels add column if not exists want_to_read boolean not null default false;
 alter table public.novels add column if not exists rating smallint not null default 0;
 alter table public.novels add column if not exists review text not null default '';
 

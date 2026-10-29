@@ -20,7 +20,7 @@ export const PRESET_TAGS = [
 const ATTACH_BUCKET = 'novel-attachments'
 export const ATTACH_MAX_BYTES = 20 * 1024 * 1024
 
-/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,isRead:boolean,rating:number,review:string,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
+/** @type {Array<{id:string,title:string,author:string,synopsis:string,tags:string[],sortOrder:number,isRead:boolean,wantToRead:boolean,rating:number,review:string,attachmentPath?:string|null,attachmentName?:string|null,attachmentMime?:string|null,attachmentSize?:number|null,createdAt:number,updatedAt:number}>} */
 let novelsCache = []
 /** @type {{ customTags: string[], hiddenPresets: string[] }} */
 let prefsCache = { customTags: [], hiddenPresets: [] }
@@ -52,6 +52,7 @@ function rowToNovel(row) {
     tags,
     sortOrder: row.sort_order ?? 0,
     isRead: Boolean(isRead),
+    wantToRead: Boolean(row.want_to_read),
     rating: clampRating(row.rating),
     review: row.review || '',
     attachmentPath: row.attachment_path || null,
@@ -233,6 +234,7 @@ async function refreshNovelTags(userId) {
 function applyNovelFilters(q, { query = '', tags = [], readFilter = 'all' } = {}) {
   if (readFilter === 'read') q = q.eq('is_read', true)
   else if (readFilter === 'unread') q = q.eq('is_read', false)
+  else if (readFilter === 'want') q = q.eq('want_to_read', true)
 
   for (const t of tags) {
     if (t) q = q.contains('tags', [t])
@@ -251,7 +253,7 @@ function applyNovelFilters(q, { query = '', tags = [], readFilter = 'all' } = {}
 
 /**
  * 从当前筛选结果里随机抽一本（服务端按 offset 取）
- * @param {{ query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read', excludeId?: string }} [opts]
+ * @param {{ query?: string, tags?: string[], readFilter?: 'all'|'unread'|'want'|'read', excludeId?: string }} [opts]
  * @returns {Promise<object|null>}
  */
 export async function pickRandomNovel(opts = {}) {
@@ -291,7 +293,7 @@ export async function pickRandomNovel(opts = {}) {
 
 /**
  * 分页拉取小说列表（服务端筛选/排序）
- * @param {{ page?: number, query?: string, tags?: string[], readFilter?: 'all'|'unread'|'read' }} [opts]
+ * @param {{ page?: number, query?: string, tags?: string[], readFilter?: 'all'|'unread'|'want'|'read' }} [opts]
  */
 export async function loadNovelsPage(opts = {}) {
   const userId = await requireUserId()
@@ -589,6 +591,27 @@ export async function setNovelRead(id, isRead) {
   return novel
 }
 
+/** 切换「很想看」标记 */
+export async function setNovelWant(id, wantToRead) {
+  const userId = await requireUserId()
+  const existing = novelsCache.find((n) => n.id === id)
+  if (!existing) throw new Error('找不到这本小说')
+  const { data: row, error } = await supabase
+    .from('novels')
+    .update({
+      want_to_read: Boolean(wantToRead),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('*')
+    .single()
+  if (error) throw error
+  const novel = rowToNovel(row)
+  novelsCache = novelsCache.map((n) => (n.id === novel.id ? novel : n))
+  return novel
+}
+
 /** 设置评分 0–5（再点同一星可取消为 0） */
 export async function setNovelRating(id, rating) {
   const userId = await requireUserId()
@@ -670,6 +693,8 @@ export async function upsertNovel(data) {
         data.rating !== undefined ? clampRating(data.rating) : clampRating(existing.rating)
       const review =
         data.review !== undefined ? String(data.review || '').trim() : existing.review || ''
+      const wantToRead =
+        data.wantToRead !== undefined ? Boolean(data.wantToRead) : Boolean(existing.wantToRead)
 
       const { data: row, error } = await supabase
         .from('novels')
@@ -679,6 +704,7 @@ export async function upsertNovel(data) {
           synopsis: (data.synopsis || '').trim(),
           tags,
           is_read: isRead,
+          want_to_read: wantToRead,
           rating,
           review,
           updated_at: nowIso,
@@ -697,6 +723,7 @@ export async function upsertNovel(data) {
 
   const rating = clampRating(data.rating)
   const review = String(data.review || '').trim()
+  const wantToRead = Boolean(data.wantToRead)
 
   // 新书排到最前（添加倒序）；手动排序模式下也插到第一位
   const minOrder = novelsCache.reduce((m, n) => Math.min(m, n.sortOrder ?? 0), 0)
@@ -709,6 +736,7 @@ export async function upsertNovel(data) {
       synopsis: (data.synopsis || '').trim(),
       tags,
       is_read: isRead,
+      want_to_read: wantToRead,
       rating,
       review,
       sort_order: novelsCache.length ? minOrder - 1 : 0,
@@ -793,7 +821,11 @@ export function searchNovels({ query = '', tags = [], readFilter = 'all' } = {})
     const matchTags = !tags.length || tags.every((t) => (n.tags || []).includes(t))
     const matchRead =
       readFilter === 'all' ||
-      (readFilter === 'read' ? n.isRead : !n.isRead)
+      (readFilter === 'want'
+        ? Boolean(n.wantToRead)
+        : readFilter === 'read'
+          ? n.isRead
+          : !n.isRead)
     return matchQ && matchTags && matchRead
   })
 }
