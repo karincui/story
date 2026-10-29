@@ -38,12 +38,11 @@ import {
   planRestoreFromMarkdown,
   applyRestoreNovels,
 } from './backup.js'
-import { listImages, addImages, getImage, deleteImage, deleteImages } from './imageStore.js'
 import { cropImageToFile } from './cropImage.js'
 import { decodeTextBuffer, decodeTextBufferAsync } from './decodeText.js'
 
 const state = {
-  page: 'library', // library | import | excel | gallery
+  page: 'library', // library | import | excel
   query: '',
   filterTags: [],
   /** all | unread | want | read */
@@ -65,11 +64,6 @@ const state = {
   excelDrafts: [],
   excelInfo: '',
   excelImporting: false,
-  galleryItems: [],
-  gallerySelected: [],
-  galleryPreviewId: null,
-  galleryLoading: false,
-  galleryMsg: '',
   authReady: false,
   user: null,
   authMode: 'login', // login | register
@@ -165,48 +159,6 @@ function withClickGuard(fn, ms = 400) {
           locked = false
         }, ms)
       })
-  }
-}
-
-function revokeGalleryPreviews() {
-  for (const item of state.galleryItems) {
-    if (item.preview) URL.revokeObjectURL(item.preview)
-  }
-}
-
-async function loadGallery() {
-  state.galleryLoading = true
-  try {
-    const rows = await listImages()
-    revokeGalleryPreviews()
-    state.galleryItems = rows.map((r) => ({
-      id: r.id,
-      name: r.name,
-      size: r.size,
-      createdAt: r.createdAt,
-      preview: URL.createObjectURL(r.blob),
-    }))
-    const alive = new Set(state.galleryItems.map((x) => x.id))
-    state.gallerySelected = state.gallerySelected.filter((id) => alive.has(id))
-    if (state.galleryPreviewId && !alive.has(state.galleryPreviewId)) {
-      state.galleryPreviewId = null
-    }
-  } finally {
-    state.galleryLoading = false
-  }
-}
-
-function formatBytes(n) {
-  if (!n || n < 1024) return `${n || 0} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / 1024 / 1024).toFixed(1)} MB`
-}
-
-function formatTime(ts) {
-  try {
-    return new Date(ts).toLocaleString()
-  } catch {
-    return ''
   }
 }
 
@@ -331,7 +283,6 @@ function render() {
         <nav class="nav">
           <button class="nav-btn ${state.page === 'library' ? 'active' : ''}" data-nav="library">小说库</button>
           <button class="nav-btn ${state.page === 'import' ? 'active' : ''}" data-nav="import">截图导入</button>
-          <button class="nav-btn ${state.page === 'gallery' ? 'active' : ''}" data-nav="gallery">图库</button>
           <button class="nav-btn ${state.page === 'excel' ? 'active' : ''}" data-nav="excel">表格录入</button>
         </nav>
         <div class="top-actions">
@@ -367,15 +318,12 @@ function render() {
           ? renderLibrary()
           : state.page === 'excel'
             ? renderExcel()
-            : state.page === 'gallery'
-              ? renderGallery()
-              : renderImport()
+            : renderImport()
       }
     </div>
     ${state.editingId !== null ? renderModal() : ''}
     ${state.viewingId ? renderViewModal() : ''}
     ${state.randomNovel ? renderRandomModal() : ''}
-    ${state.galleryPreviewId ? renderGalleryLightbox() : ''}
     ${state.readerOpen ? renderTxtReader() : ''}
     ${state.cropIndex !== null ? renderCropModal() : ''}
   `
@@ -1042,7 +990,6 @@ function renderImport() {
                  <div class="progress-bar"><span style="width:${progress.pct}%"></span></div>`
               : importFiles.length
                 ? `<button class="btn" id="start-ocr">开始识别</button>
-                   <button class="btn ghost" id="save-to-gallery" type="button">存入图库</button>
                    <button class="btn ghost" id="clear-files">清空图片</button>
                    <button class="btn ghost" id="copy-ocr-text" type="button" ${rawOcr.trim() ? '' : 'disabled'}>复制文字</button>`
                 : ''
@@ -1103,62 +1050,6 @@ function renderImport() {
         }
       </section>
     </div>
-  `
-}
-
-function renderGallery() {
-  const { galleryItems, gallerySelected, galleryLoading, galleryMsg } = state
-  const selected = new Set(gallerySelected)
-  return `
-    <div class="page-head">
-      <h2>图库</h2>
-      <p class="muted">截图保存在本机浏览器里，可随时取回识别 · 共 ${galleryItems.length} 张</p>
-    </div>
-    <div class="gallery-toolbar">
-      <button class="btn" id="gallery-use-import" type="button" ${selected.size ? '' : 'disabled'}>
-        用于识别${selected.size ? `（${selected.size}）` : ''}
-      </button>
-      <button class="btn ghost" id="gallery-del-selected" type="button" ${selected.size ? '' : 'disabled'}>
-        删除所选
-      </button>
-      <button class="btn ghost" id="gallery-select-all" type="button" ${galleryItems.length ? '' : 'disabled'}>
-        ${selected.size === galleryItems.length && galleryItems.length ? '取消全选' : '全选'}
-      </button>
-      ${galleryMsg ? `<span class="muted">${escapeHtml(galleryMsg)}</span>` : ''}
-    </div>
-    ${
-      galleryLoading
-        ? `<p class="muted">加载中…</p>`
-        : galleryItems.length
-          ? `<div class="gallery-grid">
-              ${galleryItems
-                .map((item) => {
-                  const on = selected.has(item.id)
-                  return `
-                  <article class="gallery-card ${on ? 'selected' : ''}" data-gallery-id="${item.id}">
-                    <label class="gallery-check">
-                      <input type="checkbox" data-gallery-select="${item.id}" ${on ? 'checked' : ''} />
-                    </label>
-                    <button type="button" class="gallery-thumb" data-gallery-preview="${item.id}" title="查看大图">
-                      <img src="${item.preview}" alt="${escapeHtml(item.name)}" />
-                    </button>
-                    <div class="gallery-meta">
-                      <div class="gallery-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
-                      <div class="muted">${formatTime(item.createdAt)} · ${formatBytes(item.size)}</div>
-                    </div>
-                    <button type="button" class="btn ghost sm" data-gallery-del="${item.id}">删除</button>
-                  </article>`
-                })
-                .join('')}
-            </div>`
-          : `<div class="empty">
-              <h3 class="empty-title">图库还是空的</h3>
-              <p>在「截图导入」里选好图后，点「存入图库」即可。</p>
-              <div class="empty-actions">
-                <button class="btn" data-nav="import">去截图导入</button>
-              </div>
-            </div>`
-    }
   `
 }
 
@@ -1748,22 +1639,6 @@ async function openNovelAttachment(novel) {
   }
 }
 
-function renderGalleryLightbox() {
-  const item = state.galleryItems.find((x) => x.id === state.galleryPreviewId)
-  if (!item) return ''
-  return `
-    <div class="modal-backdrop gallery-lightbox" id="gallery-lightbox">
-      <div class="gallery-lightbox-inner">
-        <img src="${item.preview}" alt="${escapeHtml(item.name)}" />
-        <div class="gallery-lightbox-bar">
-          <span>${escapeHtml(item.name)}</span>
-          <button type="button" class="btn ghost sm" id="gallery-lightbox-close">关闭</button>
-        </div>
-      </div>
-    </div>
-  `
-}
-
 function renderAttachmentField(novel) {
   const pending = state.pendingAttachmentFile
   const cleared = state.pendingAttachmentClear
@@ -1906,15 +1781,6 @@ function bindEvents() {
         const page = btn.dataset.nav
         state.page = page
         state.importMsg = ''
-        state.galleryMsg = ''
-        state.galleryPreviewId = null
-        if (page === 'gallery') {
-          await runBusy('加载图库…', async () => {
-            state.galleryLoading = true
-            render()
-            await loadGallery()
-          })
-        }
         render()
       }),
     )
@@ -2426,7 +2292,6 @@ function bindEvents() {
   bindRandomModal()
   bindImport()
   bindExcel()
-  bindGallery()
   bindTxtReader()
   bindCropModal()
 }
@@ -2519,114 +2384,6 @@ function bindRandomModal() {
         alert(err.message || String(err))
         render()
       }
-    }),
-  )
-}
-
-function bindGallery() {
-  if (state.page !== 'gallery' && !state.galleryPreviewId) return
-
-  app.querySelectorAll('[data-gallery-select]').forEach((el) => {
-    el.addEventListener('change', () => {
-      const id = el.dataset.gallerySelect
-      if (el.checked) {
-        if (!state.gallerySelected.includes(id)) state.gallerySelected = [...state.gallerySelected, id]
-      } else {
-        state.gallerySelected = state.gallerySelected.filter((x) => x !== id)
-      }
-      render()
-    })
-  })
-
-  app.querySelector('#gallery-select-all')?.addEventListener('click', () => {
-    if (state.gallerySelected.length === state.galleryItems.length) {
-      state.gallerySelected = []
-    } else {
-      state.gallerySelected = state.galleryItems.map((x) => x.id)
-    }
-    render()
-  })
-
-  app.querySelectorAll('[data-gallery-preview]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.galleryPreviewId = btn.dataset.galleryPreview
-      render()
-    })
-  })
-
-  const closeLightbox = () => {
-    state.galleryPreviewId = null
-    render()
-  }
-  app.querySelector('#gallery-lightbox-close')?.addEventListener('click', closeLightbox)
-  app.querySelector('#gallery-lightbox')?.addEventListener('click', (e) => {
-    if (e.target.id === 'gallery-lightbox') closeLightbox()
-  })
-
-  app.querySelectorAll('[data-gallery-del]').forEach((btn) => {
-    btn.addEventListener(
-      'click',
-      withClickGuard(async () => {
-        const id = btn.dataset.galleryDel
-        if (!(await askConfirm('确定从本机图库删除这张图？'))) return
-        await runBusy('删除中…', async () => {
-          await deleteImage(id)
-          state.gallerySelected = state.gallerySelected.filter((x) => x !== id)
-          if (state.galleryPreviewId === id) state.galleryPreviewId = null
-          state.galleryMsg = '已删除'
-          await loadGallery()
-        })
-        render()
-      }),
-    )
-  })
-
-  app.querySelector('#gallery-del-selected')?.addEventListener(
-    'click',
-    withClickGuard(async () => {
-      const ids = [...state.gallerySelected]
-      if (!ids.length) return
-      if (!(await askConfirm(`确定删除所选 ${ids.length} 张图？`))) return
-      await runBusy('删除中…', async () => {
-        await deleteImages(ids)
-        state.gallerySelected = []
-        state.galleryPreviewId = null
-        state.galleryMsg = `已删除 ${ids.length} 张`
-        await loadGallery()
-      })
-      render()
-    }),
-  )
-
-  app.querySelector('#gallery-use-import')?.addEventListener(
-    'click',
-    withClickGuard(async () => {
-      const ids = [...state.gallerySelected]
-      if (!ids.length) return
-      await runBusy('载入图片…', async () => {
-        const next = []
-        for (const id of ids) {
-          const row = await getImage(id)
-          if (!row?.blob) continue
-          const file = new File([row.blob], row.name || `截图-${id}.png`, {
-            type: row.type || 'image/png',
-          })
-          next.push({ file, preview: URL.createObjectURL(row.blob) })
-        }
-        if (!next.length) {
-          state.galleryMsg = '未能读取所选图片'
-          return
-        }
-        state.importFiles.forEach((f) => URL.revokeObjectURL(f.preview))
-        state.importFiles = next
-        state.importDrafts = []
-        state.rawOcr = ''
-        state.importMsg = `已从图库载入 ${next.length} 张，可开始识别`
-        state.gallerySelected = []
-        state.galleryPreviewId = null
-        state.page = 'import'
-      })
-      render()
     }),
   )
 }
@@ -3491,24 +3248,7 @@ function bindImport() {
     }),
   )
 
-  app.querySelector('#save-to-gallery')?.addEventListener(
-    'click',
-    withClickGuard(async () => {
-      if (!state.importFiles.length) return
-      const files = state.importFiles.map((f) => f.file)
-      try {
-        await runBusy('存入图库…', async () => {
-          const ids = await addImages(files)
-          state.importMsg = `已存入图库 ${ids.length} 张`
-        })
-      } catch (err) {
-        state.importMsg = `存图失败：${err.message || err}`
-      }
-      render()
-    }),
-  )
-
-  app.querySelectorAll('[data-crop-file]').forEach((btn) => {
+    app.querySelectorAll('[data-crop-file]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.preventDefault()
       e.stopPropagation()
