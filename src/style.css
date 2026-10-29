@@ -993,23 +993,85 @@ button {
   border-color: #cbd5e1;
 }
 
-.want-mark {
+.want-heart {
   appearance: none;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #c4c9d1;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
+  transition: color 0.15s, transform 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.want-heart svg {
+  display: block;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9));
+}
+
+.want-heart:hover {
+  color: #ff6b81;
+  transform: scale(1.08);
+}
+
+.want-heart:active {
+  transform: scale(0.9);
+}
+
+.want-heart.on {
+  color: #fe2c55;
+}
+
+.want-heart.on:hover {
+  color: #e11d48;
+}
+
+.want-heart.static {
+  position: static;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+  cursor: default;
+}
+
+.want-heart.form {
+  position: static;
+  width: auto;
+  height: 32px;
+  gap: 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 999px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
   background: #fff;
-  color: var(--ink-faint);
-  cursor: pointer;
-  flex: 0 0 auto;
-  position: relative;
-  z-index: 2;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  color: #94a3b8;
+}
+
+.want-heart.form .want-heart-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: inherit;
+}
+
+.want-heart.form:hover {
+  border-color: #fe2c55;
+  color: #fe2c55;
+  transform: none;
+}
+
+.want-heart.form.on {
+  background: #fff1f3;
+  border-color: #fe2c55;
+  color: #fe2c55;
 }
 
 .card-rating-row {
@@ -1021,56 +1083,13 @@ button {
   z-index: 2;
 }
 
-.want-mark svg {
-  display: block;
-}
-
-.want-mark:hover {
-  color: var(--teal);
-  border-color: var(--teal);
-}
-
-.want-mark.on {
-  color: #fff;
-  background: var(--teal);
-  border-color: var(--teal);
-  box-shadow: none;
-}
-
-.want-flag {
-  position: absolute;
-  top: 0;
-  right: 10px;
-  z-index: 3;
-  width: 14px;
-  height: 22px;
-  background: var(--teal);
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
-  box-shadow: none;
-  pointer-events: none;
-}
-
 .swipe-item.open .read-chip,
-.swipe-item.open .want-mark {
+.swipe-item.open .want-heart {
   visibility: hidden;
 }
 
-.swipe-item.open .want-flag {
-  opacity: 0.35;
-}
-
 .swipe-item.is-want .swipe-content {
-  border-color: color-mix(in srgb, var(--teal) 28%, var(--line));
-}
-
-.swipe-item.is-want:not(.is-read) .swipe-content::before {
-  background: var(--teal);
-  opacity: 1;
-}
-
-.view-want-mark {
-  pointer-events: none;
-  cursor: default;
+  border-color: color-mix(in srgb, #fe2c55 22%, var(--line));
 }
 
 .form-mark-row {
@@ -1078,31 +1097,6 @@ button {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
-}
-
-.want-chip.form-want {
-  font-size: 0.82rem;
-  padding: 6px 12px;
-  border-radius: 999px;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-.want-chip.form-want:not(.on) {
-  color: var(--ink-muted);
-  background: color-mix(in srgb, var(--bg-elevated) 70%, #fff);
-  border-color: var(--line-soft);
-}
-
-.want-chip.form-want:hover {
-  border-color: var(--teal);
-  color: var(--teal);
-}
-
-.want-chip.form-want.on {
-  box-shadow: none;
-  background: var(--teal);
-  color: #fff;
-  border-color: var(--teal);
 }
 
 .swipe-item.is-unread .swipe-content {

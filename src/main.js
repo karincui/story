@@ -650,14 +650,10 @@ function renderRandomModal() {
           ${renderStars(rating)}
           <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
           <span
-            class="want-mark view-want-mark ${wantToRead ? 'on' : ''}"
+            class="want-heart static ${wantToRead ? 'on' : ''}"
             title="${wantToRead ? '很想看' : '未标很想看'}"
             aria-label="${wantToRead ? '很想看' : '未标很想看'}"
-          >
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
-            </svg>
-          </span>
+          >${HEART_SVG}</span>
         </div>
         <div class="view-block">
           <h3>标签</h3>
@@ -705,6 +701,8 @@ async function runRandomPick({ excludeId = '' } = {}) {
   state.randomNovel = novel
   return novel
 }
+
+const HEART_SVG = `<svg class="want-heart-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`
 
 /** 星星行：卡片可点改分；表单用 data-rating 容器 */
 function renderStars(rating, { interactive = false, novelId = '', inputId = '' } = {}) {
@@ -762,26 +760,17 @@ function renderCard(n, index = 0, total = 0) {
         </button>
       </div>
       <div class="swipe-content">
-        ${
-          wantToRead
-            ? `<span class="want-flag" title="很想看" aria-hidden="true"></span>`
-            : ''
-        }
+        <button
+          type="button"
+          class="want-heart ${wantToRead ? 'on' : ''}"
+          data-toggle-want="${n.id}"
+          title="${wantToRead ? '取消很想看' : '标为很想看'}"
+          aria-label="${wantToRead ? '取消很想看' : '标为很想看'}"
+          aria-pressed="${wantToRead ? 'true' : 'false'}"
+        >${HEART_SVG}</button>
         <div class="card-main">
           <div class="card-title-row">
             <h3>${escapeHtml(n.title)}${byline}</h3>
-            <button
-              type="button"
-              class="want-mark ${wantToRead ? 'on' : ''}"
-              data-toggle-want="${n.id}"
-              title="${wantToRead ? '取消很想看' : '标为很想看'}"
-              aria-label="${wantToRead ? '取消很想看' : '标为很想看'}"
-              aria-pressed="${wantToRead ? 'true' : 'false'}"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
-              </svg>
-            </button>
           </div>
           ${reviewLine}
           <div class="card-tags">
@@ -1687,15 +1676,11 @@ function renderViewModal() {
         <div class="view-row">
           ${renderStars(rating)}
           <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
-          ${
-            wantToRead
-              ? `<span class="want-mark on view-want-mark" title="很想看" aria-label="很想看">
-                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                    <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
-                  </svg>
-                </span>`
-              : ''
-          }
+          <span
+            class="want-heart static ${wantToRead ? 'on' : ''}"
+            title="${wantToRead ? '很想看' : '未标很想看'}"
+            aria-label="${wantToRead ? '很想看' : '未标很想看'}"
+          >${HEART_SVG}</span>
         </div>
         ${
           statusTags.length
@@ -1743,11 +1728,12 @@ function renderModal() {
             ${renderStars(novel.rating || 0, { interactive: true, inputId: 'f-rating' })}
             <button
               type="button"
-              class="want-chip form-want ${novel.wantToRead ? 'on' : ''}"
+              class="want-heart form ${novel.wantToRead ? 'on' : ''}"
               id="f-want"
               aria-pressed="${novel.wantToRead ? 'true' : 'false'}"
               title="标为很想看"
-            >${novel.wantToRead ? '★ 很想看' : '☆ 很想看'}</button>
+              aria-label="很想看"
+            >${HEART_SVG}<span class="want-heart-label">很想看</span></button>
           </div>
         </div>
         <label class="field"><span>评价</span><textarea id="f-review" rows="6" placeholder="写几句观感…">${escapeHtml(novel.review || '')}</textarea></label>
@@ -2835,7 +2821,6 @@ function bindModal() {
     const next = Boolean(on)
     btn.classList.toggle('on', next)
     btn.setAttribute('aria-pressed', next ? 'true' : 'false')
-    btn.textContent = next ? '★ 很想看' : '☆ 很想看'
   }
 
   app.querySelector('#f-want')?.addEventListener('click', () => {
