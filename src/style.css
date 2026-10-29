@@ -1016,20 +1016,34 @@ button {
 
 .want-heart svg {
   display: block;
-  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9));
+  overflow: visible;
+}
+
+.want-heart svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.85;
+  stroke-linejoin: round;
+  transition: fill 0.12s, stroke-width 0.12s;
 }
 
 .want-heart:hover {
   color: #ff6b81;
-  transform: scale(1.08);
+  transform: scale(1.1);
 }
 
 .want-heart:active {
-  transform: scale(0.9);
+  transform: scale(0.88);
 }
 
 .want-heart.on {
   color: #fe2c55;
+}
+
+.want-heart.on svg path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 1;
 }
 
 .want-heart.on:hover {

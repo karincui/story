@@ -582,7 +582,7 @@ function renderLibrary() {
                   state.readFilter === 'all' && !state.query && !state.filterTags.length
                     ? '手动添加一本，或从截图里识别书名。'
                     : state.readFilter === 'want'
-                      ? '点卡片上的「很想看」标记后，会出现在这里。'
+                      ? '点卡片右上角红心后，会出现在这里。'
                       : '换个筛选看看，或点卡片上的「未读/已读」切换状态。'
                 }</p>
                 <div class="empty-actions">
