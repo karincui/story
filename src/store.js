@@ -252,7 +252,9 @@ export async function loadNovelsPage(opts = {}) {
     .trim()
     .replace(/[%_,]/g, ' ')
   if (qstr) {
-    q = q.or(`title.ilike.%${qstr}%,author.ilike.%${qstr}%,synopsis.ilike.%${qstr}%`)
+    q = q.or(
+      `title.ilike.%${qstr}%,author.ilike.%${qstr}%,synopsis.ilike.%${qstr}%,review.ilike.%${qstr}%`,
+    )
   }
 
   if (getLibrarySortPref() === 'manual') {
