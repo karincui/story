@@ -996,15 +996,6 @@ button {
   border-color: color-mix(in srgb, #6a8578 28%, transparent);
 }
 
-.card-marks {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  position: relative;
-  z-index: 2;
-}
-
 .want-mark {
   appearance: none;
   display: inline-flex;
@@ -1019,7 +1010,18 @@ button {
   color: var(--ink-faint);
   cursor: pointer;
   flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
   transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.card-rating-row {
+  display: flex;
+  align-items: center;
+  padding-left: 4px;
+  margin-top: 2px;
+  position: relative;
+  z-index: 2;
 }
 
 .want-mark svg {

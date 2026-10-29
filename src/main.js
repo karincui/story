@@ -795,21 +795,18 @@ function renderCard(n, index = 0, total = 0) {
         <div class="card-main">
           <div class="card-title-row">
             <h3>${escapeHtml(n.title)}${byline}</h3>
-            <div class="card-marks">
-              <button
-                type="button"
-                class="want-mark ${wantToRead ? 'on' : ''}"
-                data-toggle-want="${n.id}"
-                title="${wantToRead ? '取消很想看' : '标为很想看'}"
-                aria-label="${wantToRead ? '取消很想看' : '标为很想看'}"
-                aria-pressed="${wantToRead ? 'true' : 'false'}"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
-                </svg>
-              </button>
-              ${renderStars(rating, { interactive: !state.sortMode, novelId: n.id })}
-            </div>
+            <button
+              type="button"
+              class="want-mark ${wantToRead ? 'on' : ''}"
+              data-toggle-want="${n.id}"
+              title="${wantToRead ? '取消很想看' : '标为很想看'}"
+              aria-label="${wantToRead ? '取消很想看' : '标为很想看'}"
+              aria-pressed="${wantToRead ? 'true' : 'false'}"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
+              </svg>
+            </button>
           </div>
           ${reviewLine}
           <div class="card-tags">
@@ -822,6 +819,9 @@ function renderCard(n, index = 0, total = 0) {
             >${isRead ? '✓ 已读' : '未读'}</button>
             ${statusTags.map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
             ${attach}
+          </div>
+          <div class="card-rating-row">
+            ${renderStars(rating, { interactive: !state.sortMode, novelId: n.id })}
           </div>
         </div>
         ${sortControls}
