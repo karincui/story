@@ -689,7 +689,7 @@ function renderRandomModal() {
         ${filterNote}
         <div class="modal-actions random-actions">
           <button type="button" class="btn ghost" id="random-close">关闭</button>
-          <button type="button" class="btn ghost" id="random-edit">编辑</button>
+          <button type="button" class="btn ghost" id="random-view">查看</button>
           ${
             n.attachmentPath
               ? `<button type="button" class="btn ghost" id="random-open-attach">${isTxt ? '阅读' : '打开附件'}</button>`
