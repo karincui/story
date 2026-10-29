@@ -996,36 +996,82 @@ button {
   border-color: color-mix(in srgb, #6a8578 28%, transparent);
 }
 
-.want-chip {
-  appearance: none;
-  font: inherit;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  line-height: 1.2;
-  padding: 2px 8px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, #b8860b 28%, transparent);
-  cursor: pointer;
+.card-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex: 0 0 auto;
-  color: #8a6a2a;
-  background: color-mix(in srgb, #fff8e8 90%, #fff);
+  position: relative;
+  z-index: 2;
 }
 
-.want-chip.on {
-  color: #7a4e00;
-  background: #ffe9b0;
-  border-color: color-mix(in srgb, #d4a017 45%, transparent);
+.want-mark {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink-faint) 35%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface) 88%, #fff);
+  color: var(--ink-faint);
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.want-mark svg {
+  display: block;
+}
+
+.want-mark:hover {
+  color: #c4922a;
+  border-color: color-mix(in srgb, #d4a017 40%, var(--line));
+}
+
+.want-mark.on {
+  color: #fff;
+  background: linear-gradient(160deg, #e8b84a 0%, #c4922a 100%);
+  border-color: #b8860b;
+  box-shadow: 0 1px 4px color-mix(in srgb, #c4922a 35%, transparent);
+}
+
+.want-flag {
+  position: absolute;
+  top: 0;
+  right: 10px;
+  z-index: 3;
+  width: 18px;
+  height: 26px;
+  background: linear-gradient(180deg, #efc15a 0%, #c4922a 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+  box-shadow: 1px 2px 4px rgba(120, 80, 0, 0.28);
+  pointer-events: none;
 }
 
 .swipe-item.open .read-chip,
-.swipe-item.open .want-chip {
+.swipe-item.open .want-mark {
   visibility: hidden;
+}
+
+.swipe-item.open .want-flag {
+  opacity: 0.35;
+}
+
+.swipe-item.is-want .swipe-content {
+  border-color: color-mix(in srgb, #d4a017 35%, var(--line-soft));
 }
 
 .swipe-item.is-want:not(.is-read) .swipe-content::before {
   background: #d4a017;
   opacity: 0.95;
+}
+
+.view-want-mark {
+  pointer-events: none;
+  cursor: default;
 }
 
 .form-mark-row {
@@ -1055,11 +1101,6 @@ button {
 
 .want-chip.form-want.on {
   box-shadow: 0 1px 0 color-mix(in srgb, #d4a017 18%, transparent);
-}
-
-.view-want-chip {
-  pointer-events: none;
-  cursor: default;
 }
 
 .swipe-item.is-unread .swipe-content {
