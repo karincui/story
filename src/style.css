@@ -745,7 +745,9 @@ button {
 }
 
 .random-modal {
-  max-width: 420px;
+  max-width: 460px;
+  max-height: min(88vh, 720px);
+  overflow: auto;
 }
 
 .random-eyebrow {

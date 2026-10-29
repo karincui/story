@@ -666,8 +666,18 @@ function renderRandomModal() {
   const review = (n.review || '').trim()
   const synopsis = (n.synopsis || '').trim()
   const statusTags = (n.tags || []).filter((t) => t !== '未读' && t !== '已读')
+  const isRead = Boolean(n.isRead)
+  const wantToRead = Boolean(n.wantToRead)
   const isTxt =
     n.attachmentPath && isTextAttachment(n.attachmentName, n.attachmentMime, n.attachmentPath)
+  const attachLine = n.attachmentPath
+    ? `<div class="view-block">
+        <h3>附件</h3>
+        <p>
+          <button type="button" class="btn ghost sm" id="random-open-attach">${isTxt ? '阅读' : '打开'} · ${escapeHtml(n.attachmentName || '附件')}${n.attachmentSize != null ? `（${formatAttachSize(n.attachmentSize)}）` : ''}</button>
+        </p>
+      </div>`
+    : `<div class="view-block"><h3>附件</h3><p class="muted">无</p></div>`
   const filterNote =
     state.readFilter !== 'all' || state.query || state.filterTags.length
       ? `<p class="muted random-filter-note">来自当前筛选（${
@@ -688,25 +698,39 @@ function renderRandomModal() {
         <p class="random-eyebrow">不知道看什么？抽中了</p>
         <h2 id="random-title">${escapeHtml(n.title)}</h2>
         ${byline}
-        ${renderStars(rating)}
+        <div class="view-row">
+          ${renderStars(rating)}
+          <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
+          ${
+            wantToRead
+              ? `<span class="want-mark on view-want-mark" title="很想看" aria-label="很想看">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
+                  </svg>
+                </span>`
+              : ''
+          }
+        </div>
         ${
           statusTags.length
             ? `<div class="card-tags random-tags">${statusTags
                 .map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`)
                 .join('')}</div>`
-            : ''
+            : `<p class="muted random-no-tags">暂无标签</p>`
         }
-        ${review ? `<p class="random-review">${escapeHtml(review)}</p>` : ''}
-        ${synopsis ? `<p class="muted random-synopsis">${escapeHtml(synopsis)}</p>` : ''}
+        <div class="view-block">
+          <h3>评价</h3>
+          <p class="${review ? '' : 'muted'}">${review ? escapeHtml(review) : '还没有写评价'}</p>
+        </div>
+        <div class="view-block">
+          <h3>简介</h3>
+          <p class="${synopsis ? '' : 'muted'}">${synopsis ? escapeHtml(synopsis) : '暂无简介'}</p>
+        </div>
+        ${attachLine}
         ${filterNote}
         <div class="modal-actions random-actions">
           <button type="button" class="btn ghost" id="random-close">关闭</button>
-          <button type="button" class="btn ghost" id="random-view">查看</button>
-          ${
-            n.attachmentPath
-              ? `<button type="button" class="btn ghost" id="random-open-attach">${isTxt ? '阅读' : '打开附件'}</button>`
-              : ''
-          }
+          <button type="button" class="btn ghost" id="random-edit">编辑</button>
           <button type="button" class="btn" id="random-again">再抽一次</button>
         </div>
       </div>
