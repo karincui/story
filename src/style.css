@@ -780,8 +780,12 @@ button {
 }
 
 .random-tags {
-  margin: 0 0 10px;
+  margin: 0;
   padding-left: 0;
+}
+
+.random-modal .view-block .card-tags {
+  margin-top: 2px;
 }
 
 .random-empty-meta,
