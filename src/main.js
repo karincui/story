@@ -107,6 +107,8 @@ const state = {
   readerProgressOpen: false,
   /** 随机抽中的小说（弹层） */
   randomNovel: null,
+  /** 查看详情的小说 id */
+  viewingId: null,
 }
 
 /** 防重复提交：全局遮罩 + loading 文案（不整页重绘，避免表单丢失） */
@@ -370,6 +372,7 @@ function render() {
       }
     </div>
     ${state.editingId !== null ? renderModal() : ''}
+    ${state.viewingId ? renderViewModal() : ''}
     ${state.randomNovel ? renderRandomModal() : ''}
     ${state.galleryPreviewId ? renderGalleryLightbox() : ''}
     ${state.readerOpen ? renderTxtReader() : ''}
@@ -760,6 +763,9 @@ function renderCard(n, index = 0, total = 0) {
   return `
     <div class="swipe-item ${isRead ? 'is-read' : 'is-unread'} ${state.sortMode ? 'sort-mode' : ''}" data-id="${n.id}" style="animation-delay:${Math.min(index, 8) * 40}ms">
       <div class="swipe-actions">
+        <button type="button" class="swipe-btn view" data-view="${n.id}" title="查看" aria-label="查看">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 5c-5 0-9.27 3.11-11 7 1.73 3.89 6 7 11 7s9.27-3.11 11-7c-1.73-3.89-6-7-11-7zm0 12a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+        </button>
         <button type="button" class="swipe-btn edit" data-edit="${n.id}" title="编辑" aria-label="编辑">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm14.71-9.04a1 1 0 0 0 0-1.41l-2.51-2.51a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 2z"/></svg>
         </button>
@@ -1723,6 +1729,55 @@ function renderAttachmentField(novel) {
   `
 }
 
+function renderViewModal() {
+  const novel = getNovel(state.viewingId)
+  if (!novel) return ''
+  const byline = novel.author ? `<p class="view-meta">作者：${escapeHtml(novel.author)}</p>` : ''
+  const rating = clampRating(novel.rating)
+  const review = (novel.review || '').trim()
+  const synopsis = (novel.synopsis || '').trim()
+  const statusTags = (novel.tags || []).filter((t) => t !== '未读' && t !== '已读')
+  const isRead = Boolean(novel.isRead)
+  const isTxt =
+    novel.attachmentPath &&
+    isTextAttachment(novel.attachmentName, novel.attachmentMime, novel.attachmentPath)
+  const attachLine = novel.attachmentPath
+    ? `<p class="view-attach"><button type="button" class="btn ghost sm" id="view-open-attach">${isTxt ? '阅读附件' : '打开附件'} · ${escapeHtml(novel.attachmentName || '附件')}${novel.attachmentSize != null ? `（${formatAttachSize(novel.attachmentSize)}）` : ''}</button></p>`
+    : ''
+  return `
+    <div class="modal-backdrop" id="view-backdrop">
+      <div class="modal view-modal" role="dialog" aria-modal="true" aria-labelledby="view-title">
+        <h2 id="view-title">${escapeHtml(novel.title)}</h2>
+        ${byline}
+        <div class="view-row">
+          ${renderStars(rating)}
+          <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
+        </div>
+        ${
+          statusTags.length
+            ? `<div class="card-tags view-tags">${statusTags
+                .map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`)
+                .join('')}</div>`
+            : ''
+        }
+        <div class="view-block">
+          <h3>评价</h3>
+          <p class="${review ? '' : 'muted'}">${review ? escapeHtml(review) : '还没有写评价'}</p>
+        </div>
+        <div class="view-block">
+          <h3>简介</h3>
+          <p class="${synopsis ? '' : 'muted'}">${synopsis ? escapeHtml(synopsis) : '暂无简介'}</p>
+        </div>
+        ${attachLine}
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="view-close">关闭</button>
+          <button type="button" class="btn" id="view-edit">编辑</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
 function renderModal() {
   const isNew = state.editingId === 'new'
   const novel = isNew
@@ -1732,17 +1787,17 @@ function renderModal() {
 
   return `
     <div class="modal-backdrop" id="modal-backdrop">
-      <div class="modal" role="dialog">
+      <div class="modal modal-edit" role="dialog">
         <h2>${isNew ? '添加小说' : '编辑小说'}</h2>
         <p class="error-text" id="form-error" hidden></p>
         <label class="field"><span>书名</span><input id="f-title" value="${escapeHtml(novel.title)}" /></label>
         <label class="field"><span>作者（选填）</span><input id="f-author" value="${escapeHtml(novel.author)}" placeholder="有同名时建议填写" /></label>
-        <label class="field"><span>简介</span><textarea id="f-synopsis">${escapeHtml(novel.synopsis || '')}</textarea></label>
+        <label class="field"><span>简介</span><textarea id="f-synopsis" rows="8" placeholder="剧情简介、备注…">${escapeHtml(novel.synopsis || '')}</textarea></label>
         <div class="field">
           <span>评分</span>
           ${renderStars(novel.rating || 0, { interactive: true, inputId: 'f-rating' })}
         </div>
-        <label class="field"><span>评价</span><textarea id="f-review" rows="3" placeholder="写几句观感…">${escapeHtml(novel.review || '')}</textarea></label>
+        <label class="field"><span>评价</span><textarea id="f-review" rows="6" placeholder="写几句观感…">${escapeHtml(novel.review || '')}</textarea></label>
         ${renderAttachmentField(novel)}
         <div class="field">
           <span>标签（可多选，也可新增）</span>
@@ -2077,6 +2132,7 @@ function bindEvents() {
 
   const openAddNovel = withClickGuard(() => {
     state.editingId = 'new'
+    state.viewingId = null
     state.pendingAttachmentFile = null
     state.pendingAttachmentClear = false
     render()
@@ -2190,12 +2246,25 @@ function bindEvents() {
     }),
   )
 
+  app.querySelectorAll('[data-view]').forEach((btn) => {
+    btn.addEventListener(
+      'click',
+      withClickGuard((e) => {
+        e.stopPropagation()
+        state.viewingId = btn.dataset.view
+        state.editingId = null
+        render()
+      }),
+    )
+  })
+
   app.querySelectorAll('[data-edit]').forEach((btn) => {
     btn.addEventListener(
       'click',
       withClickGuard((e) => {
         e.stopPropagation()
         state.editingId = btn.dataset.edit
+        state.viewingId = null
         state.pendingAttachmentFile = null
         state.pendingAttachmentClear = false
         render()
@@ -2250,12 +2319,50 @@ function bindEvents() {
 
   bindSwipe()
   bindModal()
+  bindViewModal()
   bindRandomModal()
   bindImport()
   bindExcel()
   bindGallery()
   bindTxtReader()
   bindCropModal()
+}
+
+function bindViewModal() {
+  if (!state.viewingId) return
+
+  const close = () => {
+    state.viewingId = null
+    render()
+  }
+
+  app.querySelector('#view-backdrop')?.addEventListener('click', (e) => {
+    if (e.target.id === 'view-backdrop') close()
+  })
+  app.querySelector('#view-close')?.addEventListener('click', close)
+
+  app.querySelector('#view-edit')?.addEventListener('click', () => {
+    const id = state.viewingId
+    if (!id) return
+    state.editingId = id
+    state.viewingId = null
+    state.pendingAttachmentFile = null
+    state.pendingAttachmentClear = false
+    render()
+  })
+
+  app.querySelector('#view-open-attach')?.addEventListener(
+    'click',
+    withClickGuard(async () => {
+      const novel = getNovel(state.viewingId)
+      if (!novel?.attachmentPath) return
+      try {
+        await openNovelAttachment(novel)
+      } catch (err) {
+        alert(err.message || String(err))
+      }
+    }),
+  )
 }
 
 function bindRandomModal() {
@@ -2693,10 +2800,17 @@ function bindSwipe() {
       if (!wasTracking) return
 
       if (!moved) {
-        // tap: close if already open
+        // tap: close if already open；否则进入查看
         if (item.classList.contains('open')) {
           content.style.transform = 'translateX(0)'
           item.classList.remove('open')
+        } else if (!state.sortMode) {
+          const id = item.dataset.id
+          if (id) {
+            state.viewingId = id
+            state.editingId = null
+            render()
+          }
         }
         return
       }

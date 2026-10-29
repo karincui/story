@@ -1027,7 +1027,7 @@ button {
 }
 
 .swipe-item {
-  --swipe-actions-w: 96px;
+  --swipe-actions-w: 144px;
   position: relative;
   border-radius: 8px;
   overflow: hidden;
@@ -1060,7 +1060,7 @@ button {
 }
 
 .swipe-btn {
-  flex: 1 1 50%;
+  flex: 1 1 33.33%;
   min-width: 48px;
   border: none;
   cursor: pointer;
@@ -1074,6 +1074,14 @@ button {
 .swipe-btn svg {
   display: block;
   pointer-events: none;
+}
+
+.swipe-btn.view {
+  background: color-mix(in srgb, var(--ink-muted) 72%, #3d5a80);
+}
+
+.swipe-btn.view:hover {
+  background: color-mix(in srgb, var(--ink-muted) 55%, #2f4a6e);
 }
 
 .swipe-btn.edit {
@@ -2391,6 +2399,70 @@ button {
 .field textarea {
   min-height: 72px;
   resize: vertical;
+}
+
+.modal-edit #f-synopsis {
+  min-height: 160px;
+  line-height: 1.5;
+}
+
+.modal-edit #f-review {
+  min-height: 120px;
+  line-height: 1.5;
+}
+
+.view-modal {
+  max-width: 460px;
+  max-height: min(88vh, 720px);
+  overflow: auto;
+}
+
+.view-meta {
+  margin: -4px 0 10px;
+  color: var(--teal-mid);
+  font-size: 0.9rem;
+}
+
+.view-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.view-read-chip {
+  pointer-events: none;
+  cursor: default;
+}
+
+.view-tags {
+  margin: 0 0 12px;
+  padding-left: 0;
+}
+
+.view-block {
+  margin-bottom: 12px;
+}
+
+.view-block h3 {
+  margin: 0 0 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.view-block p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.view-attach {
+  margin: 0 0 4px;
 }
 
 .tag-picker {
