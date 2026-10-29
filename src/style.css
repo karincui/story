@@ -1094,12 +1094,15 @@ button {
 }
 
 .want-chip.form-want:hover {
-  border-color: color-mix(in srgb, #d4a017 40%, var(--line));
-  color: #7a4e00;
+  border-color: var(--teal);
+  color: var(--teal);
 }
 
 .want-chip.form-want.on {
-  box-shadow: 0 1px 0 color-mix(in srgb, #d4a017 18%, transparent);
+  box-shadow: none;
+  background: var(--teal);
+  color: #fff;
+  border-color: var(--teal);
 }
 
 .swipe-item.is-unread .swipe-content {
@@ -1321,7 +1324,7 @@ button {
 
 .star-btn:hover,
 .star-btn:focus-visible {
-  color: #c4922a;
+  color: #b45309;
   outline: none;
 }
 
