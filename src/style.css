@@ -1028,25 +1028,33 @@ button {
   opacity: 0.95;
 }
 
-.want-field {
-  margin-bottom: 12px;
-}
-
-.want-check-row {
-  display: inline-flex;
+.form-mark-row {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
-  color: var(--ink);
-  cursor: pointer;
-  letter-spacing: 0;
-  font-weight: 500;
+  gap: 10px 14px;
 }
 
-.want-check-row input {
-  width: 16px;
-  height: 16px;
-  accent-color: #c4922a;
+.want-chip.form-want {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  border-radius: 999px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.want-chip.form-want:not(.on) {
+  color: var(--ink-muted);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, #fff);
+  border-color: var(--line-soft);
+}
+
+.want-chip.form-want:hover {
+  border-color: color-mix(in srgb, #d4a017 40%, var(--line));
+  color: #7a4e00;
+}
+
+.want-chip.form-want.on {
+  box-shadow: 0 1px 0 color-mix(in srgb, #d4a017 18%, transparent);
 }
 
 .view-want-chip {
