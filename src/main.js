@@ -2392,13 +2392,12 @@ function bindRandomModal() {
     }),
   )
 
-  app.querySelector('#random-edit')?.addEventListener('click', () => {
+  app.querySelector('#random-view')?.addEventListener('click', () => {
     const n = state.randomNovel
     if (!n) return
     rememberNovel(n)
-    state.editingId = n.id
-    state.pendingAttachmentFile = null
-    state.pendingAttachmentClear = false
+    state.viewingId = n.id
+    state.editingId = null
     state.randomNovel = null
     render()
   })
