@@ -787,10 +787,29 @@ function renderCard(n, index = 0, total = 0) {
         </button>
       </div>
       <div class="swipe-content">
+        ${
+          wantToRead
+            ? `<span class="want-flag" title="很想看" aria-hidden="true"></span>`
+            : ''
+        }
         <div class="card-main">
           <div class="card-title-row">
             <h3>${escapeHtml(n.title)}${byline}</h3>
-            ${renderStars(rating, { interactive: !state.sortMode, novelId: n.id })}
+            <div class="card-marks">
+              <button
+                type="button"
+                class="want-mark ${wantToRead ? 'on' : ''}"
+                data-toggle-want="${n.id}"
+                title="${wantToRead ? '取消很想看' : '标为很想看'}"
+                aria-label="${wantToRead ? '取消很想看' : '标为很想看'}"
+                aria-pressed="${wantToRead ? 'true' : 'false'}"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                  <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
+                </svg>
+              </button>
+              ${renderStars(rating, { interactive: !state.sortMode, novelId: n.id })}
+            </div>
           </div>
           ${reviewLine}
           <div class="card-tags">
@@ -801,13 +820,6 @@ function renderCard(n, index = 0, total = 0) {
               title="${isRead ? '点一下标为未读' : '点一下标为已读'}"
               aria-pressed="${isRead ? 'true' : 'false'}"
             >${isRead ? '✓ 已读' : '未读'}</button>
-            <button
-              type="button"
-              class="want-chip ${wantToRead ? 'on' : ''}"
-              data-toggle-want="${n.id}"
-              title="${wantToRead ? '取消很想看' : '标为很想看'}"
-              aria-pressed="${wantToRead ? 'true' : 'false'}"
-            >${wantToRead ? '★ 很想看' : '很想看'}</button>
             ${statusTags.map((t) => `<span ${tagStyleAttr(t)}>${escapeHtml(t)}</span>`).join('')}
             ${attach}
           </div>
@@ -1773,7 +1785,15 @@ function renderViewModal() {
         <div class="view-row">
           ${renderStars(rating)}
           <span class="read-chip ${isRead ? 'read' : 'unread'} view-read-chip">${isRead ? '✓ 已读' : '未读'}</span>
-          <span class="want-chip ${wantToRead ? 'on' : ''} view-want-chip">${wantToRead ? '★ 很想看' : '未标很想看'}</span>
+          ${
+            wantToRead
+              ? `<span class="want-mark on view-want-mark" title="很想看" aria-label="很想看">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.2a.5.5 0 0 1-.8.4L12 17.2l-6.2 4.4a.5.5 0 0 1-.8-.4V3a1 1 0 0 1 1-1z"/>
+                  </svg>
+                </span>`
+              : ''
+          }
         </div>
         ${
           statusTags.length
